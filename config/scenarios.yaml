@@ -1,0 +1,82 @@
+# SunRoute experiment scenarios
+# Each scenario defines energy, network and load conditions for testing.
+# Used by the experiment runner and simulator.
+
+scenarios:
+  sunny_day:
+    description: "Clear sky, high solar, moderate load"
+    solar_factor: 1.0
+    wind_factor: 0.3
+    initial_soc: 0.85
+    load_multiplier: 1.0
+    internet: online
+    duration_hours: 8
+
+  cloudy_day:
+    description: "Overcast, low solar, moderate load"
+    solar_factor: 0.2
+    wind_factor: 0.5
+    initial_soc: 0.70
+    load_multiplier: 1.0
+    internet: online
+    duration_hours: 8
+
+  night_low_battery:
+    description: "No solar, low battery, light load"
+    solar_factor: 0.0
+    wind_factor: 0.2
+    initial_soc: 0.30
+    load_multiplier: 0.5
+    internet: online
+    duration_hours: 6
+
+  windy_evening:
+    description: "No solar, good wind, moderate load"
+    solar_factor: 0.0
+    wind_factor: 0.8
+    initial_soc: 0.55
+    load_multiplier: 1.0
+    internet: online
+    duration_hours: 4
+
+  internet_outage_30min:
+    description: "Internet drops for 30 minutes during moderate conditions"
+    solar_factor: 0.6
+    wind_factor: 0.3
+    initial_soc: 0.65
+    load_multiplier: 1.0
+    internet: outage_at_min_60_for_30
+    duration_hours: 3
+
+  node_failure:
+    description: "One node fails mid-run, others compensate"
+    solar_factor: 0.7
+    wind_factor: 0.4
+    initial_soc: 0.75
+    load_multiplier: 1.0
+    internet: online
+    node_failure_at_min: 45
+    duration_hours: 3
+
+  city_blackout:
+    description: "Entire city loses power, regional routing kicks in"
+    solar_factor: 0.5
+    wind_factor: 0.3
+    initial_soc: 0.60
+    load_multiplier: 1.2
+    internet: online
+    city_blackout: city-05
+    blackout_at_min: 30
+    duration_hours: 3
+
+  traffic_spike:
+    description: "Sudden 5x traffic burst for 10 minutes"
+    solar_factor: 0.8
+    wind_factor: 0.4
+    initial_soc: 0.80
+    load_multiplier: 1.0
+    internet: online
+    spike_multiplier: 5.0
+    spike_at_min: 20
+    spike_duration_min: 10
+    duration_hours: 2

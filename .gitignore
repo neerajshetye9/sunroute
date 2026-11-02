@@ -1,0 +1,78 @@
+# ── Secrets ──────────────────────────────────────────────────
+*.pem
+*.key
+*.crt
+*.env
+.env*
+!.env.example
+aws-credentials*
+credentials*
+secrets/
+*.secret
+
+# ── Models (large binaries) ─────────────────────────────────
+*.gguf
+*.bin
+*.safetensors
+*.pt
+*.onnx
+models/
+
+# ── Logs ────────────────────────────────────────────────────
+*.log
+logs/
+*.log.*
+
+# ── Python ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+*.whl
+
+# ── IDE ─────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ── Data artifacts (keep experiment configs, ignore raw data)
+experiments/raw_logs/
+experiments/results/*.parquet
+*.parquet
+!experiments/configs/
+
+# ── Docker ──────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ── Node ────────────────────────────────────────────────────
+node_modules/
+dashboard/dist/
+
+# ── OS ──────────────────────────────────────────────────────
+Thumbs.db
+.DS_Store
+
+# ── SQLite (outbox, decision log) ───────────────────────────
+*.db
+*.db-shm
+*.db-wal
+
+# ── Misc ────────────────────────────────────────────────────
+*.bak
+*.tmp
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# ── Egg info ────────────────────────────────────
+*.egg-info/

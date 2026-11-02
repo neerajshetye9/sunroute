@@ -1,0 +1,59 @@
+# SunRoute default routing configuration
+# All weights and thresholds in one place. Versioned in git.
+
+routing:
+  # Scoring weights (must sum to a sensible range; normalised 0-1 per term)
+  weights:
+    energy: 0.25
+    capacity: 0.20
+    latency: 0.20
+    locality: 0.15
+    fairness: 0.10
+    cloud_penalty: 0.10
+
+  # Hard filter thresholds
+  filters:
+    min_free_mem_mb: 500
+    max_gpu_util: 0.95
+    max_queue_depth: 10
+    max_temp_c: 80
+    min_battery_soc: 0.20          # reserve floor
+    critical_battery_soc: 0.10     # hard shutdown threshold
+    telemetry_ttl_s: 30            # stale after this many seconds
+    max_prompt_tokens: 2048
+    max_output_tokens: 1024
+
+  # Hierarchy levels
+  levels:
+    - local
+    - city
+    - region
+    - cloud
+
+  # Power of two choices: sample this many candidates per level
+  sample_size: 2
+
+energy:
+  # Deterministic energy rules for edge nodes
+  reserve_soc: 0.20               # below this, only essential tasks
+  critical_soc: 0.10              # below this, reject all inference
+  thermal_limit_c: 80             # reject if temp exceeds this
+  surplus_threshold_w: 2.0        # generation - load must exceed this to count as surplus
+  charge_efficiency: 0.90
+  discharge_efficiency: 0.95
+
+fairness:
+  # Service floor: minimum share of queries any node should receive
+  min_service_floor: 0.01         # 1% of total queries as floor
+  ledger_window_hours: 24         # rolling window for fairness ledger
+
+priorities:
+  # Priority classes (higher number = higher priority)
+  low: 1
+  normal: 2
+  high: 3
+  essential: 4                    # health, education, emergency
+
+  # Essential tasks bypass some filters (but not safety)
+  essential_bypass_locality: true
+  essential_bypass_fairness: true
