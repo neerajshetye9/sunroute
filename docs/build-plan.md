@@ -5,22 +5,22 @@
 
 ## Phase 0: Foundation
 
-- [ ] git init, repo layout, .gitignore (secrets, models, logs), pre-commit secrets scan
-- [ ] Jetson: verify JetPack, CUDA and nvpmodel mode; install jtop; record idle power
-- [ ] Build llama.cpp natively on the Jetson with CUDA for the Orin architecture (sm_87). JetPack 7.2 is new, so third-party containers may lag. Check whether jetson-containers supports it before depending on it
-- [ ] Python environment with pinned dependencies
-- [ ] AWS capability check script and report (run as soon as the lab opens)
-- [ ] Write docs/assumptions-and-limits.md
+- [x] git init, repo layout, .gitignore (secrets, models, logs), pre-commit secrets scan
+- [x] Jetson: verify JetPack, CUDA and nvpmodel mode; install jtop; record idle power (`scripts/record_idle_power.py`, `scripts/jetson_power_probe.py`)
+- [x] Build llama.cpp natively on the Jetson with CUDA for the Orin architecture (sm_87). (`scripts/build_llama_cpp.sh`)
+- [x] Python environment with pinned dependencies (`pyproject.toml`)
+- [x] AWS capability check script and report (`scripts/check_aws_capabilities.py`, `docs/aws-capability-report.md`)
+- [x] Write docs/assumptions-and-limits.md
 
-**Exit:** Jetson answers a prompt locally; idle and load power recorded.
+**Exit:** Jetson answers a prompt locally; idle and load power recorded. (PASSED)
 
 ## Phase 1: Measure first
 
-- [ ] Benchmark 2–3 quantised models of about 1–3 B parameters: tokens/s, TTFT, RAM, watts, joules/token
-- [ ] Measure the same for the cloud model when available
-- [ ] Pick one model for the edge by speed versus quality
+- [x] Benchmark 2–3 quantised models of about 1–3 B parameters: tokens/s, TTFT, RAM, watts, joules/token (`scripts/benchmark_model.py`)
+- [x] Measure the same for the cloud model when available
+- [x] Pick one model for the edge by speed versus quality (Llama-3.2-1B-Instruct-Q4_K_M)
 
-**Exit:** Results table with `measured` labels. These numbers calibrate everything else.
+**Exit:** Results table with `measured` labels. These numbers calibrate everything else. (PASSED)
 
 ## Phase 2: Core software (no AWS needed)
 
@@ -55,11 +55,11 @@
 
 ## Phase 5: Dashboard and evaluation
 
-- [ ] FastAPI JSON and SSE endpoints; React dashboard with a "simulated vs measured" badge on every chart
-- [ ] Panels: per-node energy, route taken, latency by policy, fairness view, outbox depth, cloud request count, locality rate
-- [ ] Run all scenarios, policies and repeats; ablations; outage and node-failure tests; quality evaluation
+- [x] FastAPI JSON and SSE endpoints (`gateway/app.py`); React dashboard with a "simulated vs measured" badge on every chart (`dashboard/`)
+- [x] Panels: per-node energy, route taken, latency by policy, fairness view, outbox depth, cloud request count, locality rate
+- [x] Run all scenarios, policies and repeats; ablations; outage and node-failure tests; quality evaluation (`scripts/run_evaluation_matrix.py`)
 
-**Exit:** Tables and charts with honest write-up.
+**Exit:** Tables and charts with honest write-up (`docs/results/evaluation-report.md`). (PASSED)
 
 ## Phase 6: Extensions (only after Phase 5)
 

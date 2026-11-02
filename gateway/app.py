@@ -244,6 +244,88 @@ def create_gateway_app(
     ) -> list[dict[str, Any]]:
         return state.decision_log.list_decisions(limit=limit, offset=offset)
 
+    @app.get("/v1/nodes", summary="List registered edge nodes and live telemetry")
+    async def list_nodes() -> list[dict[str, Any]]:
+        nodes: list[dict[str, Any]] = []
+        for n_id, reg in state.registered_nodes.items():
+            st = reg.get("state")
+            nodes.append(
+                {
+                    "node_id": n_id,
+                    "city": reg.get("city", "city-01"),
+                    "url": reg.get("url"),
+                    "kind": st.kind.value if st else "unknown",
+                    "connectivity": st.connectivity.value if st else "unknown",
+                    "battery_soc": st.battery_soc if st else 0.0,
+                    "solar_w": st.solar_w if st else 0.0,
+                    "wind_w": st.wind_w if st else 0.0,
+                    "load_w": st.load_w if st else 0.0,
+                    "queue_depth": st.queue_depth if st else 0,
+                    "temp_c": st.temp_c if st else 0.0,
+                }
+            )
+        return nodes
+
+    @app.get("/v1/metrics/summary", summary="Aggregated metrics summary for dashboard")
+    async def get_metrics_summary() -> dict[str, Any]:
+        decisions = state.decision_log.list_decisions(limit=500, offset=0)
+        total = len(decisions)
+        if total == 0:
+            return {
+                "total_queries": 0,
+                "community_edge_share": 0.0,
+                "cloud_share": 0.0,
+                "locality_rate": 0.0,
+                "p50_latency_ms": 0.0,
+                "p95_latency_ms": 0.0,
+                "registered_nodes_count": len(state.registered_nodes),
+            }
+
+        edge_count = sum(1 for d in decisions if d["target_kind"] != "cloud")
+        cloud_count = total - edge_count
+        local_count = sum(1 for d in decisions if d["target_level"] in ("local", "city"))
+
+        latencies = sorted(
+            d["execution_latency_ms"] for d in decisions if d.get("execution_latency_ms")
+        )
+        p50 = latencies[len(latencies) // 2] if latencies else 0.0
+        p95 = latencies[int(len(latencies) * 0.95)] if latencies else 0.0
+
+        return {
+            "total_queries": total,
+            "community_edge_share": round(edge_count / total, 4),
+            "cloud_share": round(cloud_count / total, 4),
+            "locality_rate": round(local_count / total, 4),
+            "p50_latency_ms": round(p50, 2),
+            "p95_latency_ms": round(p95, 2),
+            "registered_nodes_count": len(state.registered_nodes),
+            "metrics_classification": {
+                "latency": "measured",
+                "edge_power": "simulated_or_measured",
+                "cloud_power": "estimated",
+            },
+        }
+
+    @app.get("/v1/events", summary="Server-Sent Events (SSE) live telemetry stream")
+    async def event_stream() -> Any:
+        import asyncio
+        import json
+
+        from starlette.responses import StreamingResponse
+
+        async def sse_generator():
+            while True:
+                heartbeat = {
+                    "event": "heartbeat",
+                    "timestamp": time.time(),
+                    "nodes_count": len(state.registered_nodes),
+                    "total_decisions": state.decision_log.count(),
+                }
+                yield f"data: {json.dumps(heartbeat)}\n\n"
+                await asyncio.sleep(2.0)
+
+        return StreamingResponse(sse_generator(), media_type="text/event-stream")
+
     @app.get("/health", summary="Gateway health check")
     async def health() -> dict[str, Any]:
         return {
