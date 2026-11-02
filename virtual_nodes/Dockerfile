@@ -16,6 +16,9 @@ COPY pyproject.toml .
 RUN pip install --no-cache-dir .
 
 COPY edge/ ./edge/
+COPY router/ ./router/
+COPY gateway/ ./gateway/
+COPY cloud/ ./cloud/
 COPY config/ ./config/
 
 EXPOSE 8000
