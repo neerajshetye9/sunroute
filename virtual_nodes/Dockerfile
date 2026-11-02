@@ -20,6 +20,8 @@ COPY router/ ./router/
 COPY gateway/ ./gateway/
 COPY cloud/ ./cloud/
 COPY config/ ./config/
+COPY scripts/ ./scripts/
+COPY simulator/ ./simulator/
 
 EXPOSE 8000
 

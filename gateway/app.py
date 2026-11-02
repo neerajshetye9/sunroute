@@ -7,6 +7,7 @@ dispatches execution, writes append-only decision audit logs, and exposes teleme
 from __future__ import annotations
 
 import logging
+import os
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -60,6 +61,25 @@ class GatewayState:
         # Registered edge nodes: node_id -> {"url": str, "token": str, "state": Optional[NodeState]}
         self.registered_nodes: dict[str, dict[str, Any]] = {}
 
+        # Auto-seed nodes from environment if configured
+        seed_env = os.environ.get("SEED_NODES", "")
+        if seed_env:
+            for item in seed_env.split(","):
+                item = item.strip()
+                if not item:
+                    continue
+                parts = item.split(";")
+                if len(parts) >= 2:
+                    nid, url = parts[0].split("=", 1) if "=" in parts[0] else (parts[0], parts[0])
+                    city = parts[1] if len(parts) > 1 else "city-01"
+                    tok = parts[2] if len(parts) > 2 else "sunroute-edge-secret-token"
+                    self.registered_nodes[nid] = {
+                        "url": url.rstrip("/"),
+                        "token": tok,
+                        "city": city,
+                        "state": None,
+                    }
+
     async def close(self) -> None:
         await self.http_client.aclose()
 
@@ -84,6 +104,16 @@ def create_gateway_app(
         lifespan=lifespan,
     )
     app.state.gateway = state
+
+    @app.get("/health", summary="Gateway health check")
+    @app.get("/v1/health", summary="Gateway health check (v1)")
+    async def get_health() -> dict[str, Any]:
+        return {
+            "status": "healthy",
+            "service": "sunroute-gateway",
+            "registered_nodes": len(state.registered_nodes),
+            "cloud_backend": type(state.cloud_client).__name__,
+        }
 
     @app.post(
         "/v1/nodes/register",

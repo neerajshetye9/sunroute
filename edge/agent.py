@@ -196,6 +196,12 @@ def create_app(config: EdgeConfig | None = None) -> FastAPI:
         status_code=status.HTTP_200_OK,
         summary="Node health check",
     )
+    @app.get(
+        "/v1/health",
+        response_model=HealthResponse,
+        status_code=status.HTTP_200_OK,
+        summary="Node health check (v1)",
+    )
     async def get_health() -> HealthResponse:
         uptime = time.time() - manager.start_time
         is_alive = await manager.runtime.is_llama_server_alive()
