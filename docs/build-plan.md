@@ -24,24 +24,24 @@
 
 ## Phase 2: Core software (no AWS needed)
 
-- [ ] OpenAPI spec for edge and gateway
-- [ ] Edge agent: `/infer`, `/state`, `/health`, auth, validation, rate and size limits
-- [ ] Deterministic energy rules plus unit tests
-- [ ] SQLite outbox: retry with backoff and jitter, expiry, idempotency, failure-injection tests
-- [ ] Router library: hard filters, scoring, locality, fairness ledger, power of two choices, baselines (cloud-only, FCFS, cascade), unit tests
-- [ ] Mock cloud with the same interface as the AWS client
-- [ ] Gateway with append-only decision log
+- [x] OpenAPI spec for edge and gateway
+- [x] Edge agent: `/infer`, `/state`, `/health`, auth, validation, rate and size limits
+- [x] Deterministic energy rules plus unit tests
+- [x] SQLite outbox: retry with backoff and jitter, expiry, idempotency, failure-injection tests
+- [x] Router library: hard filters, scoring, locality, fairness ledger, power of two choices, baselines (cloud-only, FCFS, cascade), unit tests
+- [x] Mock cloud with the same interface as the AWS client
+- [x] Gateway with append-only decision log
 
-**Exit:** Full local loop runs end to end on one command.
+**Exit:** Full local loop runs end to end on one command. (PASSED)
 
 ## Phase 3: Simulation at scale
 
-- [ ] Energy simulator (solar via pvlib, wind via Weibull and power curve, battery SOC, demand with bursts), seeded
-- [ ] SimPy topology: 30 cities, hundreds to thousands of nodes, hierarchy, latency matrix
-- [ ] Virtual nodes calibrated from Phase 1 measurements, run with Docker Compose and tc netem
-- [ ] Scenarios in YAML
+- [x] Energy simulator (solar via pvlib, wind via Weibull and power curve, battery SOC, demand with bursts), seeded
+- [x] SimPy topology: 30 cities, hundreds to thousands of nodes, hierarchy, latency matrix
+- [x] Virtual nodes calibrated from Phase 1 measurements, run with Docker Compose and tc netem
+- [x] Scenarios in YAML
 
-**Exit:** All policies run on the same trace; city-1-to-city-29 behaviour measurable.
+**Exit:** All policies run on the same trace; city-1-to-city-29 behaviour measurable. (PASSED)
 
 ## Phase 4: AWS integration (time-boxed to the lab window)
 
