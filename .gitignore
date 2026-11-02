@@ -61,10 +61,12 @@ dashboard/dist/
 Thumbs.db
 .DS_Store
 
-# ── SQLite (outbox, decision log) ───────────────────────────
+# ── SQLite & DuckDB (outbox, decision log, analytics) ────────
 *.db
 *.db-shm
 *.db-wal
+*.duckdb
+*.duckdb.*
 
 # ── Misc ────────────────────────────────────────────────────
 *.bak

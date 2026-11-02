@@ -73,19 +73,19 @@ class RouterConfig:
     telemetry_ttl_s: float = 30.0
     surplus_threshold_w: float = 2.0
 
+    min_service_floor: float = 0.01
+
     # Hierarchy and sampling
     sample_size: int = 2
     levels: list[str] = field(default_factory=lambda: ["local", "city", "region", "cloud"])
 
     @classmethod
-    def from_yaml(cls, yaml_path: str) -> RouterConfig:
-        with open(yaml_path, encoding="utf-8") as f:
-            raw = yaml.safe_load(f)
-
+    def from_dict(cls, raw: dict) -> RouterConfig:
         r_cfg = raw.get("routing", {})
         weights = r_cfg.get("weights", {})
         filters = r_cfg.get("filters", {})
         energy = raw.get("energy", {})
+        fairness = raw.get("fairness", {})
 
         return cls(
             w_energy=weights.get("energy", 0.25),
@@ -102,6 +102,13 @@ class RouterConfig:
             critical_battery_soc=filters.get("critical_battery_soc", 0.10),
             telemetry_ttl_s=filters.get("telemetry_ttl_s", 30.0),
             surplus_threshold_w=energy.get("surplus_threshold_w", 2.0),
+            min_service_floor=fairness.get("min_service_floor", 0.01),
             sample_size=r_cfg.get("sample_size", 2),
             levels=r_cfg.get("levels", ["local", "city", "region", "cloud"]),
         )
+
+    @classmethod
+    def from_yaml(cls, yaml_path: str) -> RouterConfig:
+        with open(yaml_path, encoding="utf-8") as f:
+            raw = yaml.safe_load(f)
+        return cls.from_dict(raw)

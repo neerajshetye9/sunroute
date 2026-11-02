@@ -63,7 +63,7 @@ dashboard = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["edge*", "router*", "gateway*", "simulator*", "cloud*"]
+include = ["edge*", "router*", "gateway*", "simulator*", "cloud*", "experiments*"]
 
 [tool.ruff]
 target-version = "py311"
@@ -78,3 +78,7 @@ testpaths = ["edge", "router", "gateway", "simulator", "cloud", "tests"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "ignore:.*dayofyear is deprecated.*:FutureWarning",
+    "ignore:.*Pandas4Warning.*",
+]

@@ -1,0 +1,58 @@
+services:
+  edge-city-01:
+    build:
+      context: ..
+      dockerfile: virtual_nodes/Dockerfile
+    container_name: sunroute-node-city-01
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - NODE_ID=node-city-01-1
+      - CITY=city-01
+      - NODE_KIND=emulated
+      - PORT=8001
+      - AGENT_BEARER_TOKEN=sunroute-edge-secret-token
+    ports:
+      - "8001:8000"
+    networks:
+      - sunroute-net
+
+  edge-city-02:
+    build:
+      context: ..
+      dockerfile: virtual_nodes/Dockerfile
+    container_name: sunroute-node-city-02
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - NODE_ID=node-city-02-1
+      - CITY=city-02
+      - NODE_KIND=emulated
+      - PORT=8002
+      - AGENT_BEARER_TOKEN=sunroute-edge-secret-token
+    ports:
+      - "8002:8000"
+    networks:
+      - sunroute-net
+
+  edge-city-05:
+    build:
+      context: ..
+      dockerfile: virtual_nodes/Dockerfile
+    container_name: sunroute-node-city-05
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - NODE_ID=node-city-05-1
+      - CITY=city-05
+      - NODE_KIND=emulated
+      - PORT=8003
+      - AGENT_BEARER_TOKEN=sunroute-edge-secret-token
+    ports:
+      - "8003:8000"
+    networks:
+      - sunroute-net
+
+networks:
+  sunroute-net:
+    driver: bridge
