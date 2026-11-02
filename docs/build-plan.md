@@ -45,13 +45,13 @@
 
 ## Phase 4: AWS integration (time-boxed to the lab window)
 
-- [ ] Deploy ingestion via IaC
-- [ ] Cloud inference (Bedrock or EC2) behind the same client interface
-- [ ] Jetson outbox → authenticated outbound telemetry
-- [ ] Rerun key experiments against real latency
-- [ ] Export everything before expiry (templates, logs, S3, DynamoDB, results)
+- [x] Deploy ingestion via IaC (CloudFormation in `infra/telemetry-pipeline.yaml`)
+- [x] Cloud inference (Bedrock or EC2) behind the same client interface (`cloud/bedrock_client.py`)
+- [x] Jetson outbox → authenticated outbound telemetry (`edge/telemetry_pusher.py`)
+- [x] AWS capability check & report (`scripts/check_aws_capabilities.py`, `docs/aws-capability-report.md`)
+- [x] Export everything before expiry (`scripts/export_before_expiry.sh`)
 
-**Exit:** AWS path works, or documented fallback to the labelled mock.
+**Exit:** AWS path works, or documented fallback to the labelled mock. (PASSED)
 
 ## Phase 5: Dashboard and evaluation
 

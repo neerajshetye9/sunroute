@@ -151,7 +151,7 @@ def route(
     # Check cloud eligibility
     cloud_eligible = False
     if cloud_state is not None:
-        ok_cloud, c_reason = is_node_eligible(request, cloud_state, cfg, now_ts)
+        ok_cloud, _c_reason = is_node_eligible(request, cloud_state, cfg, now_ts)
         cloud_eligible = ok_cloud
 
     # --------------------------------------------------------------------------

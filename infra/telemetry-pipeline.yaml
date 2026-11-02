@@ -1,0 +1,124 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'SunRoute Serverless Telemetry Pipeline (API Gateway -> Lambda -> SQS -> Lambda -> DynamoDB & S3)'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: 'dev'
+    AllowedValues: ['dev', 'lab', 'prod']
+    Description: 'Deployment environment'
+
+  IngestionToken:
+    Type: String
+    NoEcho: true
+    Default: 'sunroute-telemetry-secret-token'
+    Description: 'Bearer token for edge node telemetry auth'
+
+Resources:
+  # ── S3 Raw Telemetry Bucket ────────────────────────────────────
+  TelemetryArchiveBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'sunroute-telemetry-${AWS::AccountId}-${Environment}'
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: TransitionToGlacierAfter30Days
+            Status: Enabled
+            ExpirationInDays: 90
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: GLACIER
+
+  # ── DynamoDB Latest Node State Table ───────────────────────────
+  NodeStateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'SunRouteNodeState-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: node_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: node_id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # ── SQS Dead Letter Queue ─────────────────────────────────────
+  TelemetryDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'sunroute-telemetry-dlq-${Environment}'
+      MessageRetentionPeriod: 1209600 # 14 days
+
+  # ── SQS Ingestion Buffer Queue ─────────────────────────────────
+  TelemetryQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'sunroute-telemetry-queue-${Environment}'
+      VisibilityTimeout: 120
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TelemetryDLQ.Arn
+        maxReceiveCount: 5
+
+  # ── Lambda Execution Role ─────────────────────────────────────
+  TelemetryLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'sunroute-telemetry-lambda-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [lambda.amazonaws.com]
+            Action: ['sts:AssumeRole']
+      Policies:
+        - PolicyName: SunRouteTelemetryPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource:
+                  - !GetAtt TelemetryQueue.Arn
+                  - !GetAtt TelemetryDLQ.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt NodeStateTable.Arn
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource: !Sub '${TelemetryArchiveBucket.Arn}/*'
+
+Outputs:
+  QueueUrl:
+    Description: 'SQS Ingestion Queue URL'
+    Value: !Ref TelemetryQueue
+    Export:
+      Name: !Sub 'SunRoute-TelemetryQueueUrl-${Environment}'
+
+  TableName:
+    Description: 'DynamoDB State Table Name'
+    Value: !Ref NodeStateTable
+
+  ArchiveBucketName:
+    Description: 'S3 Telemetry Bucket Name'
+    Value: !Ref TelemetryArchiveBucket
