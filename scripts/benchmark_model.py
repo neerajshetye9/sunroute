@@ -340,7 +340,10 @@ def main() -> None:
     parser.add_argument("--gpu-layers", type=int, default=99, help="GPU layers to offload (-ngl)")
     parser.add_argument("--threads", type=int, default=6, help="CPU threads to use")
     parser.add_argument(
+        "-o",
+        "--output",
         "--output-csv",
+        dest="output_csv",
         type=Path,
         default=PROJECT_ROOT / "docs" / "results" / "model_benchmarks.csv",
         help="Path to output CSV",
