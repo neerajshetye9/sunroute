@@ -240,7 +240,7 @@ export default function App() {
         request_id: crypto.randomUUID(),
         prompt: promptToSend,
         prompt_tokens_est: Math.max(10, Math.ceil(promptToSend.length / 4)),
-        max_output_tokens: 60,
+        max_output_tokens: 120,
         latency_target_ms: 2500,
         priority: priority,
         privacy: privacy,

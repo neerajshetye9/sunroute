@@ -186,8 +186,8 @@ class NodeEnergySimulator:
         solar_config: SolarConfig | None = None,
         wind_config: WindConfig | None = None,
         battery_config: BatteryConfig | None = None,
-        idle_power_w: float = 3.5,  # Measured Jetson Orin Nano idle baseline
-        active_power_w: float = 10.5,  # Measured Jetson Orin Nano full load
+        idle_power_w: float = 4.987,  # Calibrated Jetson Orin Nano Super idle [measured]
+        active_power_w: float = 9.557,  # Calibrated Jetson Orin Nano Super GPU load [measured]
         seed: int = 42,
     ) -> None:
         self.node_id = node_id

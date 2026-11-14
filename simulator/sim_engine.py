@@ -353,16 +353,16 @@ class SimulationEngine:
             yield resource_req
             queue_wait_ms = (self.env.now - t_enter_queue) * 1000.0
 
-            # Edge execution calibrated from Jetson Orin Nano:
-            # TTFT ~280ms, 25 tokens/s generation, 0.42 J/token measured
-            exec_time_ms = 280.0 + (req.max_output_tokens / 25.0) * 1000.0
+            # Edge execution calibrated from Jetson Orin Nano Super:
+            # TTFT ~42.1ms, 28.13 tokens/s generation, 0.339 J/token measured
+            exec_time_ms = 42.1 + (req.max_output_tokens / 28.13) * 1000.0
             yield self.env.timeout(exec_time_ms / 1000.0)
 
             # Return flight
             yield self.env.timeout((rtt_ms / 2.0) / 1000.0)
 
             total_lat = rtt_ms + queue_wait_ms + exec_time_ms
-            edge_j = (req.prompt_tokens_est + req.max_output_tokens) * 0.42
+            edge_j = (req.prompt_tokens_est + req.max_output_tokens) * 0.339
 
             node_st = self.node_states[target_id]
             is_local = self.topology.node_to_city.get(target_id) == req.origin.city

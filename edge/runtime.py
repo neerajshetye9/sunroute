@@ -52,8 +52,8 @@ class EdgeRuntime:
         latency_ms = (time.time() - start_time) * 1000.0
 
         # Energy consumption estimate:
-        # If current_power_w is 0 (mock probe), use 8.5W (calibrated Orin Nano active power)
-        active_power_w = current_power_w if current_power_w > 1.0 else 8.5
+        # If current_power_w is 0 (mock probe), use 9.557W (calibrated Orin Nano active power)
+        active_power_w = current_power_w if current_power_w > 1.0 else 9.557
         duration_s = latency_ms / 1000.0
         energy_j = active_power_w * duration_s
 

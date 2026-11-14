@@ -379,10 +379,28 @@ def create_gateway_app(
             node_info = state.registered_nodes.get(decision.target_node_id)
             if node_info and node_info.get("url"):
                 headers = {"Authorization": f"Bearer {node_info['token']}"}
+                # Apply prompt enhancer so local SLM generates a clean, complete, concise answer
+                target_words = max(25, min(55, request.max_output_tokens // 2))
+                raw_prompt = request.prompt
+                if "<|im_start|>" not in raw_prompt:
+                    enhanced_prompt = (
+                        "<|im_start|>system\n"
+                        "You are an edge AI assistant powered by a local renewable microgrid. "
+                        f"Answer directly and completely in under {target_words} words. "
+                        "Always conclude your thought cleanly with a period.<|im_end|>\n"
+                        f"<|im_start|>user\n{raw_prompt}<|im_end|>\n"
+                        "<|im_start|>assistant\n"
+                    )
+                else:
+                    enhanced_prompt = raw_prompt
+
+                enhanced_req_dict = request.model_dump(mode="json")
+                enhanced_req_dict["prompt"] = enhanced_prompt
+
                 try:
                     res = await state.http_client.post(
                         f"{node_info['url']}/infer",
-                        json=request.model_dump(mode="json"),
+                        json=enhanced_req_dict,
                         headers=headers,
                         timeout=30.0,
                     )
@@ -411,20 +429,34 @@ def create_gateway_app(
                 origin_city = request.origin.city
                 rtt = state.topology.calculate_rtt_ms(origin_city, target_city)
                 output_tokens = min(
-                    request.max_output_tokens, max(20, request.prompt_tokens_est * 2)
+                    request.max_output_tokens, max(30, request.prompt_tokens_est * 2)
                 )
-                energy_j = output_tokens * 0.42  # Calibrated Jetson baseline (0.42 J/token)
-                exec_delay_ms = round((output_tokens / 25.0) * 1000.0 + rtt, 2)
+                # Digital Twin calibrated to physical Jetson Orin Nano Super:
+                # 0.339 J/token total measured, 28.13 t/s generation, 42.1 ms TTFT
+                energy_j = output_tokens * 0.339
+                exec_delay_ms = round(42.1 + (output_tokens / 28.13) * 1000.0 + rtt, 2)
+
+                if any(
+                    w in request.prompt.lower() for w in ["microgrid", "solar", "battery", "energy"]
+                ):
+                    sim_answer = (
+                        "Solar battery microgrids generate clean local power and store surplus "
+                        "for high-efficiency AI execution. This query was processed at "
+                        f"{city_name} under clean energy with {rtt:.1f}ms spatial delay."
+                    )
+                else:
+                    sim_answer = (
+                        f"Community edge node at {city_name} successfully resolved your "
+                        f"{request.task_type.value} request using local solar/battery reserves. "
+                        f"Network latency from {origin_city}: {rtt:.1f} ms."
+                    )
 
                 response = ChatCompletionResponse(
                     request_id=request.request_id,
                     node_id=decision.target_node_id,
                     text=(
-                        f"[Community Edge AI Node: {decision.target_node_id} @ {city_name}]\n\n"
-                        f"Processed '{request.task_type.value}' query for {origin_city}.\n\n"
-                        f"Answer: Community edge node in {city_name} successfully handled this "
-                        "request using local clean energy (solar/battery reserves). "
-                        f"Network RTT from your city: {rtt:.1f} ms."
+                        f"[Digital Twin Edge Node: {decision.target_node_id} @ {city_name}]\n\n"
+                        f"{sim_answer}"
                     ),
                     prompt_tokens=request.prompt_tokens_est,
                     output_tokens=output_tokens,
