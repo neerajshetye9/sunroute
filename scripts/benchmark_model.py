@@ -141,6 +141,16 @@ def run_single_inference(
             str(threads),
             "--simple-io",
         ]
+        run_env = os.environ.copy()
+        lib_dirs = [
+            str(PROJECT_ROOT / "bin" / "lib"),
+            str(PROJECT_ROOT / "bin" / "lib64"),
+            str(PROJECT_ROOT / "build" / "llama.cpp" / "build" / "bin"),
+            str(PROJECT_ROOT / "build" / "llama.cpp" / "build" / "src"),
+            "/usr/local/cuda/lib64",
+        ]
+        curr_ld = run_env.get("LD_LIBRARY_PATH", "")
+        run_env["LD_LIBRARY_PATH"] = ":".join(lib_dirs + ([curr_ld] if curr_ld else []))
         try:
             proc = subprocess.run(
                 cmd,
@@ -148,6 +158,7 @@ def run_single_inference(
                 text=True,
                 timeout=120,
                 check=False,
+                env=run_env,
             )
             raw_output = proc.stdout + "\n" + proc.stderr
             timings = parse_llama_timings(raw_output)
