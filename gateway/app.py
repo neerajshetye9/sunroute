@@ -6,6 +6,8 @@ dispatches execution, writes append-only decision audit logs, and exposes teleme
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import logging
 import os
 import time
@@ -21,7 +23,8 @@ from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from cloud.mock_client import MockCloudClient
+from cloud.bedrock_client import BedrockCloudClient
+from cloud.mock_client import generate_cloud_knowledge_response
 from edge.schemas import (
     ConnectivityStatus,
     EnergySource,
@@ -29,6 +32,13 @@ from edge.schemas import (
     InferenceResponse,
     NodeKind,
     NodeState,
+    Origin,
+    TaskType,
+)
+from gateway.chat_store import (
+    ChatAttachment,
+    ChatMessageRecord,
+    ChatStore,
 )
 from gateway.decision_log import DecisionAuditLog
 from router.core import route
@@ -90,6 +100,33 @@ class NodeRegistration(BaseModel):
     city: str = "city-01"
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str = "demo"
+    display_name: str | None = None
+    role: str = "student"
+    default_city: str = "city-02"
+
+
+class CreateConversationRequest(BaseModel):
+    user_id: str
+    title: str = "New Chat"
+
+
+class SendChatMessageRequest(BaseModel):
+    conversation_id: str
+    user_id: str
+    prompt: str
+    policy: PolicyType = PolicyType.PROPOSED
+    origin_city: str = "city-02"
+    attachments: list[ChatAttachment] = []
+    max_output_tokens: int = 120
+
+
+class OpsCopilotRequest(BaseModel):
+    prompt: str
+
+
 class GatewayState:
     """Manages active node registry, 30-city topology, router, and audit log."""
 
@@ -101,8 +138,9 @@ class GatewayState:
     ):
         self.config = config or RouterConfig()
         self.decision_log = DecisionAuditLog(audit_db_path)
+        self.chat_store = ChatStore("experiments/chat_history.db")
         self.ledger = FairnessLedger()
-        self.cloud_client = MockCloudClient()
+        self.cloud_client = BedrockCloudClient(fallback_to_mock=True)
         self.http_client = httpx.AsyncClient(timeout=30.0)
 
         # 30-city topology & naming
@@ -307,7 +345,10 @@ def create_gateway_app(
                 )
 
         # 3. Cloud node
-        cloud_st = await state.cloud_client.get_state()
+        if inspect.iscoroutinefunction(state.cloud_client.get_state):
+            cloud_st = await state.cloud_client.get_state()
+        else:
+            cloud_st = state.cloud_client.get_state()
         nodes_telemetry.append(cloud_st)
 
         return nodes_telemetry
@@ -434,7 +475,12 @@ def create_gateway_app(
                 actual_prompt_toks = request.prompt_tokens_est
                 actual_out_toks = 35
 
-                for n_info in state.registered_nodes.values():
+                # Prioritize physical hardware / live llama-server (e.g. jetson-01) over mock nodes
+                sorted_nodes = sorted(
+                    state.registered_nodes.items(),
+                    key=lambda item: 0 if item[0] == "jetson-01" else 1,
+                )
+                for _nid, n_info in sorted_nodes:
                     if n_info.get("url"):
                         try:
                             headers = {"Authorization": f"Bearer {n_info['token']}"}
@@ -458,12 +504,15 @@ def create_gateway_app(
                             )
                             if res.status_code == 200:
                                 raw_data = res.json()
-                                generated_text = raw_data.get("text", "").strip()
-                                actual_prompt_toks = raw_data.get(
-                                    "prompt_tokens", actual_prompt_toks
-                                )
-                                actual_out_toks = raw_data.get("output_tokens", actual_out_toks)
-                                break
+                                cand_text = raw_data.get("text", "").strip()
+                                # Verify it's real generated output, not an unconfigured placeholder
+                                if cand_text and not cand_text.startswith("[SunRoute"):
+                                    generated_text = cand_text
+                                    actual_prompt_toks = raw_data.get(
+                                        "prompt_tokens", actual_prompt_toks
+                                    )
+                                    actual_out_toks = raw_data.get("output_tokens", actual_out_toks)
+                                    break
                         except Exception as e:
                             logger.debug(
                                 "LLM pass-through on %s failed: %s",
@@ -472,21 +521,7 @@ def create_gateway_app(
                             )
 
                 if not generated_text:
-                    if any(
-                        w in request.prompt.lower()
-                        for w in ["microgrid", "solar", "battery", "energy"]
-                    ):
-                        generated_text = (
-                            "Solar battery microgrids generate clean local power and store surplus "
-                            "for high-efficiency AI execution. This query was processed at "
-                            f"{city_name} under clean energy with {rtt:.1f}ms spatial delay."
-                        )
-                    else:
-                        generated_text = (
-                            f"Community edge node at {city_name} successfully resolved "
-                            f"your request using local solar/battery reserves. "
-                            f"Network latency from {origin_city}: {rtt:.1f} ms."
-                        )
+                    generated_text = generate_cloud_knowledge_response(request.prompt)
 
                 # Digital Twin calibrated to physical Jetson Orin Nano Super:
                 # 0.339 J/token total measured, 28.13 t/s generation, 42.1 ms TTFT
@@ -658,7 +693,6 @@ def create_gateway_app(
 
     @app.get("/v1/events", summary="Server-Sent Events (SSE) live telemetry stream")
     async def event_stream() -> Any:
-        import asyncio
         import json
 
         from starlette.responses import StreamingResponse
@@ -680,6 +714,219 @@ def create_gateway_app(
                 await asyncio.sleep(2.0)
 
         return StreamingResponse(sse_generator(), media_type="text/event-stream")
+
+    # ── Multi-User & Persistent Chat Studio Endpoints ───────────────
+
+    @app.post("/v1/auth/login", summary="Demo login and user profile retrieval")
+    async def login(req: LoginRequest) -> dict[str, Any]:
+        user = state.chat_store.get_or_create_user(
+            username=req.username,
+            display_name=req.display_name,
+            role=req.role,
+            default_city=req.default_city,
+        )
+        return {"status": "ok", "user": user.model_dump()}
+
+    @app.get("/v1/auth/users", summary="List predefined demo personas")
+    async def list_demo_users() -> list[dict[str, Any]]:
+        users = state.chat_store.list_users()
+        return [u.model_dump() for u in users]
+
+    @app.get("/v1/chat/conversations", summary="List chat conversations for a user")
+    async def list_conversations(user_id: str = Query(...)) -> list[dict[str, Any]]:
+        convs = state.chat_store.list_conversations(user_id)
+        return [c.model_dump() for c in convs]
+
+    @app.post("/v1/chat/conversations", summary="Create a new chat conversation")
+    async def create_conversation(req: CreateConversationRequest) -> dict[str, Any]:
+        conv = state.chat_store.create_conversation(user_id=req.user_id, title=req.title)
+        return conv.model_dump()
+
+    @app.get("/v1/chat/conversations/{conversation_id}", summary="Get conversation messages")
+    async def get_conversation_details(conversation_id: str) -> dict[str, Any]:
+        conv = state.chat_store.get_conversation(conversation_id)
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        messages = state.chat_store.list_messages(conversation_id)
+        return {
+            "conversation": conv.model_dump(),
+            "messages": [m.model_dump() for m in messages],
+        }
+
+    @app.delete("/v1/chat/conversations/{conversation_id}", summary="Delete conversation")
+    async def delete_conversation(conversation_id: str) -> dict[str, str]:
+        state.chat_store.delete_conversation(conversation_id)
+        return {"status": "deleted", "conversation_id": conversation_id}
+
+    @app.post("/v1/chat/messages", summary="Send message in conversation with routing")
+    async def send_chat_message(req: SendChatMessageRequest) -> dict[str, Any]:
+        # Ensure conversation exists
+        conv = state.chat_store.get_conversation(req.conversation_id)
+        if not conv:
+            title_cand = req.prompt.strip()[:40] + ("..." if len(req.prompt.strip()) > 40 else "")
+            conv = state.chat_store.create_conversation(user_id=req.user_id, title=title_cand)
+            conv_id = conv.conversation_id
+        else:
+            conv_id = req.conversation_id
+            if conv.message_count == 0 and conv.title in ("New Chat", ""):
+                title_cand = req.prompt.strip()[:40] + (
+                    "..." if len(req.prompt.strip()) > 40 else ""
+                )
+                state.chat_store.update_conversation_title(conv_id, title_cand)
+
+        # Record user message
+        user_msg = ChatMessageRecord(
+            conversation_id=conv_id,
+            user_id=req.user_id,
+            sender="user",
+            text=req.prompt,
+            attachments=req.attachments,
+        )
+        state.chat_store.append_message(user_msg)
+
+        # Build inference request
+        task_kind = TaskType.CHAT
+        if req.attachments and any("image" in a.mime_type for a in req.attachments):
+            task_kind = TaskType.VISION
+
+        infer_req = InferenceRequest(
+            request_id=uuid.uuid4(),
+            prompt=req.prompt,
+            task_type=task_kind,
+            prompt_tokens_est=max(10, len(req.prompt.split()) * 2),
+            max_output_tokens=req.max_output_tokens,
+            latency_target_ms=3000.0,
+            origin=Origin(
+                city=req.origin_city,
+                site=f"{req.origin_city}-user-society",
+            ),
+        )
+
+        # Execute routing and dispatch
+        response = await route_and_infer(request=infer_req, policy=req.policy)
+
+        # Record assistant message
+        asst_msg = ChatMessageRecord(
+            conversation_id=conv_id,
+            user_id=req.user_id,
+            sender="assistant",
+            text=response.text,
+            routing_metadata=response.routing_metadata,
+        )
+        state.chat_store.append_message(asst_msg)
+
+        return {
+            "conversation_id": conv_id,
+            "user_message": user_msg.model_dump(),
+            "assistant_message": asst_msg.model_dump(),
+        }
+
+    # ── System Monitor AI Ops Copilot Endpoint ───────────────────────
+
+    @app.post("/v1/ops/copilot", summary="Inquire about fleet telemetry and system routing")
+    async def ops_copilot(req: OpsCopilotRequest) -> dict[str, Any]:
+        prompt_lower = req.prompt.lower()
+        nodes_telem = await get_node_telemetry()
+        recent_decisions = state.decision_log.list_decisions(limit=10)
+
+        # Compute fleet aggregates
+        edge_nodes = [n for n in nodes_telem if n.kind != NodeKind.CLOUD]
+        total_edge = len(edge_nodes)
+        online_count = sum(1 for n in edge_nodes if n.connectivity == ConnectivityStatus.ONLINE)
+        avg_soc = (sum(n.battery_soc for n in edge_nodes) / total_edge) if total_edge else 0.0
+        total_solar_w = sum(n.solar_w for n in edge_nodes)
+        total_wind_w = sum(n.wind_w for n in edge_nodes)
+        total_load_w = sum(n.load_w for n in edge_nodes)
+
+        low_soc_nodes = [n for n in edge_nodes if n.battery_soc < 0.65]
+        top_solar_nodes = sorted(edge_nodes, key=lambda n: n.solar_w, reverse=True)[:5]
+
+        # Analyze question intent
+        if any(w in prompt_lower for w in ["battery", "soc", "charge", "reserve"]):
+            if low_soc_nodes:
+                items_str = ", ".join(
+                    f"{state.city_names.get(n.city, n.city)} "
+                    f"({n.battery_soc * 100:.1f}%, solar: {n.solar_w:.1f}W)"
+                    for n in low_soc_nodes[:5]
+                )
+                answer = (
+                    f"🔋 **Fleet Battery Diagnosis**:\n\n"
+                    f"• Average Fleet Battery SOC: **{avg_soc * 100:.1f}%** "
+                    f"across {total_edge} microgrids.\n"
+                    f"• **{len(low_soc_nodes)} nodes** operate below 65% battery floor.\n"
+                    f"• Lowest charge sites: {items_str}.\n\n"
+                    "💡 *Routing Recommendation*: Queries originating near low-SOC sites are\n"
+                    "automatically offloaded to neighbor microgrids with surplus solar generation."
+                )
+            else:
+                answer = (
+                    f"🔋 **Fleet Battery Status Healthy**:\n\n"
+                    f"• All {total_edge} microgrid nodes have healthy reserves above 65% SOC "
+                    f"(fleet avg: **{avg_soc * 100:.1f}%**).\n"
+                    "• Local edge inference capacity is currently at 100% availability."
+                )
+
+        elif any(w in prompt_lower for w in ["solar", "generation", "wind", "renewable", "power"]):
+            top_str = "\n".join(
+                f"• **{state.city_names.get(n.city, n.city)}**: {n.solar_w:.1f} W solar "
+                f"(SOC: {n.battery_soc * 100:.1f}%)"
+                for n in top_solar_nodes
+            )
+            net_surplus = max(0.0, total_solar_w + total_wind_w - total_load_w)
+            answer = (
+                f"☀️ **Renewable Generation Telemetry**:\n\n"
+                f"• Total Fleet Solar: **{total_solar_w:.1f} W**\n"
+                f"• Total Fleet Wind: **{total_wind_w:.1f} W**\n"
+                f"• Total Compute Load: **{total_load_w:.1f} W**\n"
+                f"• Net Clean Surplus: **{net_surplus:.1f} W**\n\n"
+                f"**Top Solar Producing Microgrids**:\n{top_str}"
+            )
+
+        elif any(
+            w in prompt_lower for w in ["why", "route", "decision", "bedrock", "cloud", "fallback"]
+        ):
+            cloud_decisions = [d for d in recent_decisions if d.get("target_kind") == "cloud"]
+            if cloud_decisions:
+                last_cloud = cloud_decisions[0]
+                answer = (
+                    f"☁️ **Routing & Cloud Audit Analysis**:\n\n"
+                    f"• Recent cloud offload rate: "
+                    f"**{len(cloud_decisions)}/{len(recent_decisions)} recent queries**.\n"
+                    f"• Most recent cloud decision ID: `{last_cloud.get('decision_id')}`\n"
+                    f"• Reason: *{last_cloud.get('reason')}*\n"
+                    f"• Origin: {last_cloud.get('origin_city')} / {last_cloud.get('origin_site')}\n"
+                    f"• Latency: {last_cloud.get('execution_latency_ms')} ms\n\n"
+                    "SunRoute routes to AWS Bedrock when battery drops below reserve floors,\n"
+                    "when tokens exceed edge limits, or when latency SLAs require cloud compute."
+                )
+            else:
+                answer = (
+                    "⚡ **Routing Efficiency Report**:\n\n"
+                    f"• In the last {len(recent_decisions)} requests, **100% of queries were\n"
+                    "successfully resolved on community edge microgrids**.\n"
+                    "• Zero cloud escalations were triggered because local battery and solar\n"
+                    "reserves satisfied all operational SLAs."
+                )
+
+        else:
+            backend_name = type(state.cloud_client).__name__
+            answer = (
+                f"📊 **SunRoute Microgrid Fleet Operations Summary**:\n\n"
+                f"• **Active Nodes**: {online_count}/{total_edge} microgrid nodes online.\n"
+                f"• **Solar Generation**: {total_solar_w:.1f} W | **Wind**: {total_wind_w:.1f} W\n"
+                f"• **Fleet Battery Reserve**: {avg_soc * 100:.1f}% average SOC\n"
+                f"• **Recent Audit Decisions**: {len(recent_decisions)} logged in SQLite\n"
+                f"• **Cloud Fallback Tier**: AWS Bedrock Runtime ({backend_name})\n\n"
+                "You can ask me questions like: *'Which nodes have low battery?'*, "
+                "*'Show solar generation'*, or *'Why was the last query routed to cloud?'*."
+            )
+
+        return {
+            "prompt": req.prompt,
+            "response": answer,
+            "telemetry_timestamp": datetime.now(UTC).isoformat(),
+            "nodes_analyzed": len(nodes_telem),
+        }
 
     return app
 

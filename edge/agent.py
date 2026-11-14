@@ -151,7 +151,7 @@ def create_app(config: EdgeConfig | None = None) -> FastAPI:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail=(
-                        f"Battery critically low ({manager.battery_soc*100:.1f}%). "
+                        f"Battery critically low ({manager.battery_soc * 100:.1f}%). "
                         "Only essential requests accepted."
                     ),
                 )

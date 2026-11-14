@@ -12,6 +12,7 @@ services:
       - ./gateway:/app/gateway
       - ./simulator:/app/simulator
       - ./edge:/app/edge
+      - ./cloud:/app/cloud
       - ./router:/app/router
       - ./experiments:/app/experiments
     ports:

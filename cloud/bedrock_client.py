@@ -35,7 +35,7 @@ class BedrockCloudClient(CloudInferenceClient):
 
     def __init__(
         self,
-        model_id: str = "amazon.titan-text-express-v1",
+        model_id: str = "anthropic.claude-3-haiku-20240307-v1:0",
         region_name: str | None = None,
         fallback_to_mock: bool = True,
     ) -> None:
@@ -49,42 +49,69 @@ class BedrockCloudClient(CloudInferenceClient):
 
     def _init_bedrock_client(self) -> None:
         try:
-            self._client = boto3.client("bedrock-runtime", region_name=self.region)
+            aws_key = os.environ.get("AWS_ACCESS_KEY_ID")
+            aws_secret = os.environ.get("AWS_SECRET_ACCESS_KEY")
+            aws_session = os.environ.get("AWS_SESSION_TOKEN")
+
+            kwargs: dict[str, Any] = {"region_name": self.region}
+            if aws_key and aws_secret:
+                kwargs["aws_access_key_id"] = aws_key
+                kwargs["aws_secret_access_key"] = aws_secret
+                if aws_session:
+                    kwargs["aws_session_token"] = aws_session
+
+            self._client = boto3.client("bedrock-runtime", **kwargs)
+            logger.info(
+                "Initialized AWS Bedrock client in region %s for model %s",
+                self.region,
+                self.model_id,
+            )
         except Exception as e:
-            logger.warning("Failed to initialize Bedrock client: %s", e)
+            logger.warning("Failed to initialize Bedrock client: %s. Using fallback.", e)
             self._client = None
+
+    def health(self) -> dict[str, Any]:
+        """Return health status and fallback availability."""
+        return {
+            "status": "healthy" if self._client is not None else "degraded",
+            "fallback_enabled": self.fallback_to_mock,
+            "model_id": self.model_id,
+            "region": self.region,
+        }
 
     async def infer(self, request: InferenceRequest) -> InferenceResponse:
         """Execute inference on AWS Bedrock or fallback."""
-        if self._client is None and self.mock_fallback:
-            return await self.mock_fallback.infer(request)
+        if self._client is None:
+            if self.mock_fallback:
+                return await self.mock_fallback.infer(request)
+            raise RuntimeError("Bedrock client is not configured and mock fallback is disabled.")
 
         t0 = time.perf_counter()
         try:
             # Prepare request payload depending on model family
-            if "titan" in self.model_id:
+            if "claude" in self.model_id or "anthropic" in self.model_id:
+                body = json.dumps(
+                    {
+                        "anthropic_version": "bedrock-2023-05-31",
+                        "max_tokens": min(request.max_output_tokens * 2, 1024),
+                        "messages": [{"role": "user", "content": request.prompt}],
+                    }
+                )
+            elif "titan" in self.model_id:
                 body = json.dumps(
                     {
                         "inputText": request.prompt,
                         "textGenerationConfig": {
-                            "maxTokenCount": request.max_output_tokens,
+                            "maxTokenCount": min(request.max_output_tokens * 2, 1024),
                             "temperature": 0.7,
                         },
-                    }
-                )
-            elif "anthropic" in self.model_id:
-                body = json.dumps(
-                    {
-                        "anthropic_version": "bedrock-2023-05-31",
-                        "max_tokens": request.max_output_tokens,
-                        "messages": [{"role": "user", "content": request.prompt}],
                     }
                 )
             else:  # Generic Llama / Mistral prompt
                 body = json.dumps(
                     {
                         "prompt": request.prompt,
-                        "max_gen_len": request.max_output_tokens,
+                        "max_gen_len": min(request.max_output_tokens * 2, 1024),
                         "temperature": 0.7,
                     }
                 )
@@ -99,10 +126,11 @@ class BedrockCloudClient(CloudInferenceClient):
             exec_time_ms = (time.perf_counter() - t0) * 1000.0
 
             # Extract generated text
-            if "titan" in self.model_id:
+            if "claude" in self.model_id or "anthropic" in self.model_id:
+                content_blocks = response_body.get("content", [])
+                text = "".join(b.get("text", "") for b in content_blocks if b.get("type") == "text")
+            elif "titan" in self.model_id:
                 text = response_body.get("results", [{}])[0].get("outputText", "")
-            elif "anthropic" in self.model_id:
-                text = response_body.get("content", [{}])[0].get("text", "")
             else:
                 text = response_body.get("generation", "")
 
@@ -114,7 +142,7 @@ class BedrockCloudClient(CloudInferenceClient):
             return InferenceResponse(
                 request_id=request.request_id,
                 node_id="aws-bedrock-datacenter",
-                text=text.strip(),
+                text=f"[AWS Bedrock Central - {self.model_id}]\n\n{text.strip()}",
                 prompt_tokens=request.prompt_tokens_est,
                 output_tokens=tokens_generated,
                 latency_ms=round(exec_time_ms, 2),
@@ -122,7 +150,7 @@ class BedrockCloudClient(CloudInferenceClient):
             )
 
         except (ClientError, BotoCoreError, Exception) as e:
-            logger.warning("AWS Bedrock call failed (%s). Checking fallback.", e)
+            logger.warning("AWS Bedrock call failed (%s). Delegating to fallback.", e)
             if self.mock_fallback:
                 return await self.mock_fallback.infer(request)
             raise RuntimeError(f"Bedrock invocation failed and fallback disabled: {e}") from e
@@ -131,29 +159,19 @@ class BedrockCloudClient(CloudInferenceClient):
         """Return cloud node state."""
         return NodeState(
             node_id="aws-bedrock-datacenter",
-            city="city-01",  # Co-located with central cloud data center
+            city="city-01",  # Co-located with central cloud data center in Mumbai
             kind=NodeKind.CLOUD,
             models=[self.model_id],
             free_mem_mb=128000,
             gpu_util=0.25,
-            queue_depth=0,
-            temp_c=42,
+            queue_depth=1,
+            temp_c=42.0,
             battery_soc=1.0,  # Grid powered
             solar_w=0.0,
             wind_w=0.0,
-            load_w=280.0,  # Cloud server blade baseline
+            load_w=250.0,  # Cloud server blade baseline (W)
             connectivity=ConnectivityStatus.ONLINE
             if self._client is not None
             else ConnectivityStatus.DEGRADED,
             energy_source=EnergySource.SIMULATED,
         )
-
-    def health(self) -> dict[str, Any]:
-        """Health check for Bedrock connection."""
-        return {
-            "status": "healthy" if self._client is not None else "degraded",
-            "model_id": self.model_id,
-            "region": self.region,
-            "has_credentials": self._client is not None,
-            "fallback_enabled": self.fallback_to_mock,
-        }

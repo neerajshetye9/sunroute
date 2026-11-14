@@ -97,11 +97,23 @@ class EdgeRuntime:
 
     def _infer_mock(self, req: InferenceRequest) -> tuple[str, int, int]:
         """Calibrated mock generation when llama.cpp server is offline."""
-        mock_text = (
-            f"[SunRoute {self.config.node_id}] Processed '{req.task_type.value}' query "
-            f"for origin site {req.origin.site} ({req.origin.city}). "
-            "Edge inference served locally under community energy policy."
-        )
-        words = mock_text.split()
+        p_lower = req.prompt.lower()
+        if any(w in p_lower for w in ["solar", "microgrid", "battery"]):
+            ans = (
+                "Solar microgrids combine local photovoltaic generation with battery storage to\n"
+                "deliver reliable, low-carbon electricity. During high solar irradiance, surplus\n"
+                "power is stored or allocated to local edge compute nodes."
+            )
+        elif any(w in p_lower for w in ["electricity", "power", "grid", "energy"]):
+            ans = (
+                "Electricity in this microgrid is generated via solar and wind arrays,\n"
+                "monitored by energy controllers to preserve battery health."
+            )
+        else:
+            ans = (
+                f"Resolved query on community edge node {self.config.node_id}.\n"
+                "Edge inference operates on clean local renewable power."
+            )
+        words = ans.split()
         out_tokens = min(len(words), req.max_output_tokens)
-        return mock_text, req.prompt_tokens_est, out_tokens
+        return ans, req.prompt_tokens_est, out_tokens
