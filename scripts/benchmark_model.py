@@ -111,6 +111,16 @@ def parse_llama_timings(output: str) -> dict[str, float]:
         res["output_tokens"] = float(eval_match.group(2))
         res["tokens_per_sec"] = float(eval_match.group(3))
 
+    # Fallback parser for newer llama-cli timing format:
+    # [ Prompt: 474.9 t/s | Generation: 26.9 t/s ]
+    if res["tokens_per_sec"] == 0.0:
+        new_format = re.search(
+            r"Prompt:\s*([\d\.]+)\s*t/s\s*\|\s*Generation:\s*([\d\.]+)\s*t/s",
+            output,
+        )
+        if new_format:
+            res["tokens_per_sec"] = float(new_format.group(2))
+
     return res
 
 
@@ -139,6 +149,7 @@ def run_single_inference(
             str(gpu_layers),
             "-t",
             str(threads),
+            "--no-conversation",
             "--simple-io",
         ]
         run_env = os.environ.copy()
@@ -155,6 +166,7 @@ def run_single_inference(
             proc = subprocess.run(
                 cmd,
                 capture_output=True,
+                stdin=subprocess.DEVNULL,
                 text=True,
                 timeout=120,
                 check=False,
