@@ -39,8 +39,13 @@ class BedrockCloudClient(CloudInferenceClient):
         region_name: str | None = None,
         fallback_to_mock: bool = True,
     ) -> None:
-        self.model_id = model_id
-        self.region = region_name or os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+        self.model_id = os.environ.get("BEDROCK_MODEL_ID", model_id)
+        self.region = (
+            region_name
+            or os.environ.get("AWS_DEFAULT_REGION")
+            or os.environ.get("AWS_REGION")
+            or "us-east-1"
+        )
         self.fallback_to_mock = fallback_to_mock
         self.mock_fallback = MockCloudClient() if fallback_to_mock else None
 

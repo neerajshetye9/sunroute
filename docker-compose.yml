@@ -7,6 +7,10 @@ services:
     environment:
       - PORT=8000
       - SEED_NODES=node-city-01-1=http://edge-city-01:8000;city-01;sunroute-edge-secret-token,node-city-02-1=http://edge-city-02:8000;city-02;sunroute-edge-secret-token,node-city-05-1=http://edge-city-05:8000;city-05;sunroute-edge-secret-token,jetson-01=http://100.67.230.49:8000;city-01;dev-edge-token
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID:-anthropic.claude-3-haiku-20240307-v1:0}
     command: ["uvicorn", "gateway.app:app", "--host", "0.0.0.0", "--port", "8000"]
     volumes:
       - ./gateway:/app/gateway
@@ -15,6 +19,7 @@ services:
       - ./cloud:/app/cloud
       - ./router:/app/router
       - ./experiments:/app/experiments
+      - ./dashboard/dist:/app/dashboard/dist
     ports:
       - "8000:8000"
     networks:

@@ -928,6 +928,13 @@ def create_gateway_app(
             "nodes_analyzed": len(nodes_telem),
         }
 
+    # Mount compiled frontend dashboard if built
+    dist_path = Path(__file__).resolve().parent.parent / "dashboard" / "dist"
+    if dist_path.exists():
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/", StaticFiles(directory=str(dist_path), html=True), name="static")
+
     return app
 
 

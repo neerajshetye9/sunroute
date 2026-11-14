@@ -28,7 +28,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
-dist/
+/dist/
 build/
 *.egg
 .venv/
@@ -55,7 +55,7 @@ docker-compose.override.yml
 
 # ── Node ────────────────────────────────────────────────────
 node_modules/
-dashboard/dist/
+# dashboard/dist/ (tracked for zero-dependency edge deployment)
 
 # ── OS ──────────────────────────────────────────────────────
 Thumbs.db
