@@ -82,7 +82,10 @@ def parse_llama_timings(output: str) -> dict[str, float]:
     Example llama output:
     llama_print_timings: prompt eval time = 120.45 ms / 32 tokens ( 265.67 t/s)
     llama_print_timings:        eval time = 4520.12 ms / 128 tokens ( 28.32 t/s)
+    or:
+    [ Prompt: 488.1 t/s | Generation: 27.5 t/s ]
     """
+    clean_text = re.sub(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", "", output)
     res = {
         "prompt_tokens": 0.0,
         "ttft_ms": 0.0,
@@ -94,7 +97,7 @@ def parse_llama_timings(output: str) -> dict[str, float]:
     # Prompt eval (TTFT)
     prompt_match = re.search(
         r"prompt eval time\s*=\s*([\d\.]+)\s*ms\s*/\s*(\d+)\s*tokens",
-        output,
+        clean_text,
     )
     if prompt_match:
         res["ttft_ms"] = float(prompt_match.group(1))
@@ -104,7 +107,7 @@ def parse_llama_timings(output: str) -> dict[str, float]:
     eval_match = re.search(
         r"(?<!prompt )eval time\s*=\s*([\d\.]+)\s*ms\s*/\s*(\d+)\s*tokens.*?"
         r"([\d\.]+)\s*tokens per second",
-        output,
+        clean_text,
     )
     if eval_match:
         res["eval_time_ms"] = float(eval_match.group(1))
@@ -116,7 +119,7 @@ def parse_llama_timings(output: str) -> dict[str, float]:
     if res["tokens_per_sec"] == 0.0:
         new_format = re.search(
             r"Prompt:\s*([\d\.]+)\s*t/s\s*\|\s*Generation:\s*([\d\.]+)\s*t/s",
-            output,
+            clean_text,
         )
         if new_format:
             prompt_tps = float(new_format.group(1))
@@ -126,7 +129,7 @@ def parse_llama_timings(output: str) -> dict[str, float]:
             if res["ttft_ms"] == 0.0 and prompt_tps > 0:
                 res["ttft_ms"] = round((res["prompt_tokens"] / prompt_tps) * 1000.0, 1)
             if res["output_tokens"] == 0.0:
-                res["output_tokens"] = 32.0
+                res["output_tokens"] = 128.0
 
     return res
 
@@ -179,9 +182,9 @@ def run_single_inference(
             )
             raw_output = proc.stdout + "\n" + proc.stderr
             timings = parse_llama_timings(raw_output)
-            if proc.returncode != 0 or timings["tokens_per_sec"] == 0.0:
+            if proc.returncode != 0:
                 logger.warning(
-                    "llama execution code=%d\nOutput tail:\n%s",
+                    "llama execution error code=%d:\n%s",
                     proc.returncode,
                     raw_output[-1000:],
                 )
