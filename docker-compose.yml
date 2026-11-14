@@ -6,7 +6,7 @@ services:
     container_name: sunroute-gateway
     environment:
       - PORT=8000
-      - SEED_NODES=node-city-01-1=http://edge-city-01:8000;city-01;sunroute-edge-secret-token,node-city-02-1=http://edge-city-02:8000;city-02;sunroute-edge-secret-token,node-city-05-1=http://edge-city-05:8000;city-05;sunroute-edge-secret-token
+      - SEED_NODES=node-city-01-1=http://edge-city-01:8000;city-01;sunroute-edge-secret-token,node-city-02-1=http://edge-city-02:8000;city-02;sunroute-edge-secret-token,node-city-05-1=http://edge-city-05:8000;city-05;sunroute-edge-secret-token,jetson-01=http://100.67.230.49:8000;city-01;dev-edge-token
     command: ["uvicorn", "gateway.app:app", "--host", "0.0.0.0", "--port", "8000"]
     volumes:
       - ./gateway:/app/gateway
