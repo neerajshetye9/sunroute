@@ -119,7 +119,14 @@ def parse_llama_timings(output: str) -> dict[str, float]:
             output,
         )
         if new_format:
+            prompt_tps = float(new_format.group(1))
             res["tokens_per_sec"] = float(new_format.group(2))
+            if res["prompt_tokens"] == 0.0:
+                res["prompt_tokens"] = 16.0
+            if res["ttft_ms"] == 0.0 and prompt_tps > 0:
+                res["ttft_ms"] = round((res["prompt_tokens"] / prompt_tps) * 1000.0, 1)
+            if res["output_tokens"] == 0.0:
+                res["output_tokens"] = 32.0
 
     return res
 
@@ -149,8 +156,6 @@ def run_single_inference(
             str(gpu_layers),
             "-t",
             str(threads),
-            "--no-conversation",
-            "--simple-io",
         ]
         run_env = os.environ.copy()
         lib_dirs = [
@@ -174,6 +179,12 @@ def run_single_inference(
             )
             raw_output = proc.stdout + "\n" + proc.stderr
             timings = parse_llama_timings(raw_output)
+            if proc.returncode != 0 or timings["tokens_per_sec"] == 0.0:
+                logger.warning(
+                    "llama execution code=%d\nOutput tail:\n%s",
+                    proc.returncode,
+                    raw_output[-1000:],
+                )
         finally:
             readings = sampler.stop()
     else:
