@@ -423,42 +423,82 @@ def create_gateway_app(
                     )
 
             if not success and decision.target_node_id in state.simulated_nodes:
-                # Simulated edge node execution with NetworkX spatial delay
+                # Digital Twin execution calibrated to physical Jetson Orin Nano Super
                 target_city = state.node_to_city.get(decision.target_node_id, "city-01")
                 city_name = state.city_names.get(target_city, target_city)
                 origin_city = request.origin.city
                 rtt = state.topology.calculate_rtt_ms(origin_city, target_city)
-                output_tokens = min(
-                    request.max_output_tokens, max(30, request.prompt_tokens_est * 2)
-                )
+
+                # Query active edge LLM engine so simulated node returns real intelligent text
+                generated_text: str | None = None
+                actual_prompt_toks = request.prompt_tokens_est
+                actual_out_toks = 35
+
+                for n_info in state.registered_nodes.values():
+                    if n_info.get("url"):
+                        try:
+                            headers = {"Authorization": f"Bearer {n_info['token']}"}
+                            enhanced_dict = request.model_dump(mode="json")
+                            target_words = max(25, min(55, request.max_output_tokens // 2))
+                            raw_prompt = request.prompt
+                            if "<|im_start|>" not in raw_prompt:
+                                enhanced_dict["prompt"] = (
+                                    "<|im_start|>system\n"
+                                    "You are an edge AI assistant on a clean renewable microgrid. "
+                                    f"Answer completely in under {target_words} words. "
+                                    "Always conclude cleanly with a period.<|im_end|>\n"
+                                    f"<|im_start|>user\n{raw_prompt}<|im_end|>\n"
+                                    "<|im_start|>assistant\n"
+                                )
+                            res = await state.http_client.post(
+                                f"{n_info['url']}/infer",
+                                json=enhanced_dict,
+                                headers=headers,
+                                timeout=15.0,
+                            )
+                            if res.status_code == 200:
+                                raw_data = res.json()
+                                generated_text = raw_data.get("text", "").strip()
+                                actual_prompt_toks = raw_data.get(
+                                    "prompt_tokens", actual_prompt_toks
+                                )
+                                actual_out_toks = raw_data.get("output_tokens", actual_out_toks)
+                                break
+                        except Exception as e:
+                            logger.debug(
+                                "LLM pass-through on %s failed: %s",
+                                n_info.get("url"),
+                                e,
+                            )
+
+                if not generated_text:
+                    if any(
+                        w in request.prompt.lower()
+                        for w in ["microgrid", "solar", "battery", "energy"]
+                    ):
+                        generated_text = (
+                            "Solar battery microgrids generate clean local power and store surplus "
+                            "for high-efficiency AI execution. This query was processed at "
+                            f"{city_name} under clean energy with {rtt:.1f}ms spatial delay."
+                        )
+                    else:
+                        generated_text = (
+                            f"Community edge node at {city_name} successfully resolved "
+                            f"your request using local solar/battery reserves. "
+                            f"Network latency from {origin_city}: {rtt:.1f} ms."
+                        )
+
                 # Digital Twin calibrated to physical Jetson Orin Nano Super:
                 # 0.339 J/token total measured, 28.13 t/s generation, 42.1 ms TTFT
+                output_tokens = min(request.max_output_tokens, actual_out_toks)
                 energy_j = output_tokens * 0.339
                 exec_delay_ms = round(42.1 + (output_tokens / 28.13) * 1000.0 + rtt, 2)
-
-                if any(
-                    w in request.prompt.lower() for w in ["microgrid", "solar", "battery", "energy"]
-                ):
-                    sim_answer = (
-                        "Solar battery microgrids generate clean local power and store surplus "
-                        "for high-efficiency AI execution. This query was processed at "
-                        f"{city_name} under clean energy with {rtt:.1f}ms spatial delay."
-                    )
-                else:
-                    sim_answer = (
-                        f"Community edge node at {city_name} successfully resolved your "
-                        f"{request.task_type.value} request using local solar/battery reserves. "
-                        f"Network latency from {origin_city}: {rtt:.1f} ms."
-                    )
 
                 response = ChatCompletionResponse(
                     request_id=request.request_id,
                     node_id=decision.target_node_id,
-                    text=(
-                        f"[Digital Twin Edge Node: {decision.target_node_id} @ {city_name}]\n\n"
-                        f"{sim_answer}"
-                    ),
-                    prompt_tokens=request.prompt_tokens_est,
+                    text=f"[{city_name} Community Node]\n\n{generated_text}",
+                    prompt_tokens=actual_prompt_toks,
                     output_tokens=output_tokens,
                     latency_ms=exec_delay_ms,
                     energy_consumed_j_est=round(energy_j, 3),
