@@ -117,19 +117,19 @@ def parse_llama_timings(output: str) -> dict[str, float]:
     # Fallback parser for newer llama-cli timing format:
     # [ Prompt: 474.9 t/s | Generation: 26.9 t/s ]
     if res["tokens_per_sec"] == 0.0:
-        new_format = re.search(
-            r"Prompt:\s*([\d\.]+)\s*t/s\s*\|\s*Generation:\s*([\d\.]+)\s*t/s",
-            clean_text,
-        )
-        if new_format:
-            prompt_tps = float(new_format.group(1))
-            res["tokens_per_sec"] = float(new_format.group(2))
+        gen_match = re.search(r"Generation:\s*([\d\.]+)\s*t/s", clean_text)
+        if gen_match:
+            res["tokens_per_sec"] = float(gen_match.group(1))
+
+        prompt_match_alt = re.search(r"Prompt:\s*([\d\.]+)\s*t/s", clean_text)
+        if prompt_match_alt:
+            prompt_tps = float(prompt_match_alt.group(1))
             if res["prompt_tokens"] == 0.0:
                 res["prompt_tokens"] = 16.0
             if res["ttft_ms"] == 0.0 and prompt_tps > 0:
                 res["ttft_ms"] = round((res["prompt_tokens"] / prompt_tps) * 1000.0, 1)
-            if res["output_tokens"] == 0.0:
-                res["output_tokens"] = 128.0
+        if res["output_tokens"] == 0.0:
+            res["output_tokens"] = 128.0
 
     return res
 
