@@ -1,6 +1,6 @@
 # AWS Capability and Permission Audit Report
 
-- **Generated at**: `2026-11-02T14:42:51.400613+00:00`
+- **Generated at**: `2026-11-17T18:37:01.510439+00:00`
 - **Region**: `us-east-1`
 - **Verdict**: `NO_CREDENTIALS`
 

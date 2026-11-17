@@ -23,7 +23,7 @@ from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from cloud.bedrock_client import BedrockCloudClient
+from cloud.factory import get_cloud_client
 from cloud.mock_client import generate_cloud_knowledge_response
 from edge.schemas import (
     ConnectivityStatus,
@@ -140,7 +140,7 @@ class GatewayState:
         self.decision_log = DecisionAuditLog(audit_db_path)
         self.chat_store = ChatStore("experiments/chat_history.db")
         self.ledger = FairnessLedger()
-        self.cloud_client = BedrockCloudClient(fallback_to_mock=True)
+        self.cloud_client = get_cloud_client(fallback_to_mock=True)
         self.http_client = httpx.AsyncClient(timeout=30.0)
 
         # 30-city topology & naming
@@ -399,9 +399,10 @@ def create_gateway_app(
         response: ChatCompletionResponse | None = None
         success = False
 
-        is_cloud = (
-            decision.target_kind == NodeKind.CLOUD
-            or decision.target_node_id == "aws-bedrock-central"
+        is_cloud = decision.target_kind == NodeKind.CLOUD or decision.target_node_id in (
+            "aws-bedrock-central",
+            "aws-bedrock-datacenter",
+            "nvidia-nim-datacenter",
         )
         if is_cloud:
             cloud_res = await state.cloud_client.infer(request)
@@ -558,11 +559,18 @@ def create_gateway_app(
 
         # Attach rich routing metadata for ChatGPT UI transparency
         target_city_id = state.node_to_city.get(decision.target_node_id, "")
-        target_city_name = (
-            state.city_names.get(target_city_id, "AWS Bedrock Central")
-            if target_city_id
-            else "AWS Bedrock Central"
-        )
+        if "nvidia" in str(decision.target_node_id).lower():
+            target_city_name = "NVIDIA NIM Cloud Datacenter"
+        elif "bedrock" in str(decision.target_node_id).lower():
+            target_city_name = "AWS Bedrock Central"
+        elif decision.target_kind == NodeKind.CLOUD:
+            target_city_name = "Central Cloud Datacenter"
+        else:
+            target_city_name = (
+                state.city_names.get(target_city_id, "Central Cloud Datacenter")
+                if target_city_id
+                else "Central Cloud Datacenter"
+            )
         decision_id = str(uuid.uuid4())
         sb = decision.score_breakdown
         response.routing_metadata = {

@@ -18,7 +18,9 @@ import httpx
 import pytest
 
 from cloud.bedrock_client import BedrockCloudClient
+from cloud.factory import get_cloud_client
 from cloud.ingestion_handler import api_gateway_handler
+from cloud.nvidia_client import NvidiaNimClient
 from edge.outbox import SQLiteOutbox
 from edge.schemas import InferenceRequest, Origin, TaskType
 from edge.telemetry_pusher import TelemetryPusher
@@ -142,3 +144,50 @@ async def test_telemetry_pusher_flush(tmp_path: Path) -> None:
         delivered = await pusher.flush_batch(client=test_client)
         assert delivered == 1
         assert outbox.count("pending") == 0
+
+
+@pytest.mark.asyncio
+async def test_nvidia_nim_client_fallback_and_state() -> None:
+    # Test client initialization and fallback behavior
+    client = NvidiaNimClient(api_key=None, fallback_to_mock=True)
+    st = await client.get_state()
+    assert st.node_id == "nvidia-nim-datacenter"
+    assert st.kind.value == "cloud"
+    assert st.load_w > 0.0
+
+    req = InferenceRequest(
+        request_id=uuid4(),
+        origin=Origin(city="city-01", site="society-1"),
+        task_type=TaskType.SHORT_QA,
+        prompt_tokens_est=20,
+        max_output_tokens=30,
+        latency_target_ms=2000,
+        prompt="Explain solar power microgrids",
+    )
+    resp = await client.infer(req)
+    assert resp.request_id == req.request_id
+    assert resp.output_tokens > 0
+    assert resp.latency_ms > 0.0
+    await client.close()
+
+
+def test_cloud_factory_selection() -> None:
+    with patch.dict(
+        "os.environ",
+        {"NVIDIA_API_KEY": "test-nvapi"},  # pragma: allowlist secret
+        clear=False,
+    ):
+        c = get_cloud_client()
+        assert isinstance(c, NvidiaNimClient)
+
+    with patch.dict(
+        "os.environ",
+        {
+            "NVIDIA_API_KEY": "",
+            "AWS_ACCESS_KEY_ID": "test-key",
+            "AWS_SECRET_ACCESS_KEY": "test-sec",  # pragma: allowlist secret
+        },
+        clear=False,
+    ):
+        c = get_cloud_client()
+        assert isinstance(c, BedrockCloudClient)

@@ -78,3 +78,4 @@ htmlcov/
 
 # ── Egg info ────────────────────────────────────
 *.egg-info/
+cloudflared

@@ -4,9 +4,13 @@ services:
       context: .
       dockerfile: virtual_nodes/Dockerfile
     container_name: sunroute-gateway
+    env_file:
+      - .env
     environment:
       - PORT=8000
-      - SEED_NODES=node-city-01-1=http://edge-city-01:8000;city-01;sunroute-edge-secret-token,node-city-02-1=http://edge-city-02:8000;city-02;sunroute-edge-secret-token,node-city-05-1=http://edge-city-05:8000;city-05;sunroute-edge-secret-token,jetson-01=http://100.67.230.49:8000;city-01;dev-edge-token
+      - SEED_NODES=node-city-01-1=http://edge-city-01:8000;city-01;sunroute-edge-secret-token,node-city-02-1=http://edge-city-02:8000;city-02;sunroute-edge-secret-token,node-city-05-1=http://edge-city-05:8000;city-05;sunroute-edge-secret-token,jetson-01=http://100.67.230.49:8001;city-01;dev-edge-token
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      - NVIDIA_MODEL_ID=${NVIDIA_MODEL_ID:-nvidia/nemotron-3.5-bolt-e4b}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
