@@ -801,6 +801,11 @@ def create_gateway_app(
                 continue
             role = "User" if m.sender == "user" else "Assistant"
             clean_txt = re.sub(r"^\[.*?\]\s*", "", m.text).strip()
+            # Clean out any old multilingual appendices or system notes from history
+            clean_txt = re.sub(r"\[System note:.*?\]", "", clean_txt).strip()
+            clean_txt = re.sub(
+                r"### 🌐 Multilingual Support.*", "", clean_txt, flags=re.DOTALL
+            ).strip()
             if clean_txt:
                 snippet = clean_txt if len(clean_txt) <= 300 else clean_txt[:300] + "..."
                 context_turns.append(f"{role}: {snippet}")

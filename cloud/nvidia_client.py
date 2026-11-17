@@ -115,11 +115,11 @@ class NvidiaNimClient(CloudInferenceClient):
                 {
                     "role": "system",
                     "content": (
-                        "You are the central cloud AI assistant in the SunRoute "
-                        "solar microgrid system, running on high-performance datacenter GPUs. "
-                        "You deliver thorough, fluent, and comprehensive responses for "
-                        "all inquiries, essays, detailed explanations, and multilingual "
-                        "queries (including Marathi and Hindi) with high accuracy and depth."
+                        "You are the central cloud AI assistant in SunRoute. "
+                        "Answer user queries thoroughly, accurately, and naturally. "
+                        "Always respond strictly in the single language used or "
+                        "requested by the user (e.g., respond in English if asked in English). "
+                        "Never add unsolicited translations or multilingual appendices."
                     ),
                 }
             ]
