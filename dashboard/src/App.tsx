@@ -353,6 +353,19 @@ export default function App() {
     setIsInferring(true);
 
     try {
+      let maxTokens = 250;
+      const lower = textToSend.toLowerCase();
+      if (lower.includes('1000 word') || lower.includes('1000 words')) {
+        maxTokens = 850;
+      } else if (
+        lower.includes('500 words') ||
+        lower.includes('400 words') ||
+        lower.includes('300 words') ||
+        lower.includes('essay')
+      ) {
+        maxTokens = 600;
+      }
+
       const payload = {
         conversation_id: currentConversationId || 'new',
         user_id: currentUser.user_id,
@@ -360,7 +373,7 @@ export default function App() {
         origin_city: selectedCity,
         policy: policy,
         attachments: userMsg.attachments || [],
-        max_output_tokens: 120,
+        max_output_tokens: maxTokens,
       };
 
       const res = await fetch(`${API_BASE}/v1/chat/messages`, {

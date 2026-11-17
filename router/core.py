@@ -86,6 +86,40 @@ def pick_power_of_two(
     return sampled[1], s2
 
 
+def is_complex_or_heavy_task(request: InferenceRequest) -> tuple[bool, str]:
+    """Check if query demands cloud scale (long output, essay, or non-Latin multilingual)."""
+    prompt_lower = request.prompt.lower()
+
+    if request.task_type == TaskType.LONG_FORM:
+        return True, "task type LONG_FORM escalated to central cloud tier"
+
+    if request.max_output_tokens >= 300:
+        return True, f"requested token budget ({request.max_output_tokens}) exceeds edge capacity"
+
+    heavy_keywords = [
+        "essay",
+        "1000 words",
+        "500 words",
+        "400 words",
+        "300 words",
+        "detailed article",
+        "comprehensive report",
+        "in-depth",
+        "write an essay",
+    ]
+    if any(k in prompt_lower for k in heavy_keywords):
+        return True, "task demands extensive generative length (essay/long form)"
+
+    # Non-Latin multilingual scripts (Devanagari, Marathi, Hindi, etc.)
+    has_devanagari = any("\u0900" <= ch <= "\u097f" for ch in request.prompt)
+    if has_devanagari or any(
+        lang in prompt_lower for lang in ["in marathi", "in hindi", "marathi", "hindi"]
+    ):
+        return True, "multilingual/Devanagari query escalated to central cloud tier"
+
+    return False, ""
+
+
 def route(
     request: InferenceRequest,
     node_states: Sequence[NodeState],
@@ -265,6 +299,21 @@ def route(
     # --------------------------------------------------------------------------
     # 5. Proposed Router: Hierarchical + Power of Two Choices
     # --------------------------------------------------------------------------
+    # Complex tasks, extensive generation demands, or multilingual queries escalate to cloud
+    is_heavy, heavy_reason = is_complex_or_heavy_task(request)
+    if is_heavy and cloud_eligible and cloud_state is not None:
+        sb = score_candidate(request, cloud_state, cfg, HierarchyLevel.CLOUD, ledger)
+        return Decision(
+            target_node_id=cloud_state.node_id,
+            target_kind=NodeKind.CLOUD,
+            target_level=HierarchyLevel.CLOUD,
+            score_breakdown=sb,
+            reason=f"Proposed router: {heavy_reason}",
+            policy_used=policy,
+            timestamp_iso=iso_time,
+            selected_node_state=cloud_state,
+        )
+
     local_nodes, city_nodes, region_nodes = partition_by_level(eligible_edge, req_origin)
 
     # Tier 1: Local
@@ -304,8 +353,7 @@ def route(
             target_level=HierarchyLevel.REGION,
             score_breakdown=sb,
             reason=(
-                "Proposed router: local/city capacity depleted, "
-                "cross-city regional routing applied"
+                "Proposed router: local/city capacity depleted, cross-city regional routing applied"
             ),
             policy_used=policy,
             timestamp_iso=iso_time,

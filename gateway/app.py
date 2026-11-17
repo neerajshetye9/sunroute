@@ -10,6 +10,7 @@ import asyncio
 import inspect
 import logging
 import os
+import re
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -422,7 +423,7 @@ def create_gateway_app(
             if node_info and node_info.get("url"):
                 headers = {"Authorization": f"Bearer {node_info['token']}"}
                 # Apply prompt enhancer so local SLM generates a clean, complete, concise answer
-                target_words = max(25, min(55, request.max_output_tokens // 2))
+                target_words = max(25, min(150, int(request.max_output_tokens * 0.7)))
                 raw_prompt = request.prompt
                 if "<|im_start|>" not in raw_prompt:
                     enhanced_prompt = (
@@ -486,7 +487,7 @@ def create_gateway_app(
                         try:
                             headers = {"Authorization": f"Bearer {n_info['token']}"}
                             enhanced_dict = request.model_dump(mode="json")
-                            target_words = max(25, min(55, request.max_output_tokens // 2))
+                            target_words = max(25, min(150, int(request.max_output_tokens * 0.7)))
                             raw_prompt = request.prompt
                             if "<|im_start|>" not in raw_prompt:
                                 enhanced_dict["prompt"] = (
@@ -792,18 +793,52 @@ def create_gateway_app(
         )
         state.chat_store.append_message(user_msg)
 
-        # Build inference request
+        # Assemble multi-turn context from conversation history (up to last 6 turns)
+        history = state.chat_store.list_messages(conv_id)
+        context_turns: list[str] = []
+        for m in history[-6:]:
+            if m.message_id == user_msg.message_id:
+                continue
+            role = "User" if m.sender == "user" else "Assistant"
+            clean_txt = re.sub(r"^\[.*?\]\s*", "", m.text).strip()
+            if clean_txt:
+                snippet = clean_txt if len(clean_txt) <= 300 else clean_txt[:300] + "..."
+                context_turns.append(f"{role}: {snippet}")
+
+        if context_turns:
+            full_prompt = "\n".join(context_turns) + f"\nUser: {req.prompt}"
+        else:
+            full_prompt = req.prompt
+
+        # Dynamically scale token budget and task category if user asks for long form / essay
+        p_lower = req.prompt.lower()
+        effective_max_tokens = req.max_output_tokens
         task_kind = TaskType.CHAT
+
+        has_devanagari = any("\u0900" <= ch <= "\u097f" for ch in req.prompt)
+        is_multilingual = has_devanagari or any(
+            lang in p_lower for lang in ["in marathi", "in hindi", "marathi", "hindi"]
+        )
+
         if req.attachments and any("image" in a.mime_type for a in req.attachments):
             task_kind = TaskType.VISION
+        elif any(w in p_lower for w in ["1000 words", "1000 word"]):
+            effective_max_tokens = max(effective_max_tokens, 800)
+            task_kind = TaskType.LONG_FORM
+        elif any(w in p_lower for w in ["500 words", "400 words", "300 words", "essay"]):
+            effective_max_tokens = max(effective_max_tokens, 500)
+            task_kind = TaskType.LONG_FORM
+        elif is_multilingual:
+            effective_max_tokens = max(effective_max_tokens, 400)
+            task_kind = TaskType.LONG_FORM
 
         infer_req = InferenceRequest(
             request_id=uuid.uuid4(),
-            prompt=req.prompt,
+            prompt=full_prompt,
             task_type=task_kind,
-            prompt_tokens_est=max(10, len(req.prompt.split()) * 2),
-            max_output_tokens=req.max_output_tokens,
-            latency_target_ms=3000.0,
+            prompt_tokens_est=max(10, len(full_prompt.split()) * 2),
+            max_output_tokens=effective_max_tokens,
+            latency_target_ms=8000.0 if task_kind == TaskType.LONG_FORM else 3000.0,
             origin=Origin(
                 city=req.origin_city,
                 site=f"{req.origin_city}-user-society",

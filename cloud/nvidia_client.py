@@ -110,21 +110,58 @@ class NvidiaNimClient(CloudInferenceClient):
         t0 = time.perf_counter()
         try:
             client = await self._get_http_client()
+            # Parse conversation messages if formatted as multi-turn turns
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are the central cloud AI assistant in the SunRoute "
+                        "solar microgrid system, running on high-performance datacenter GPUs. "
+                        "You deliver thorough, fluent, and comprehensive responses for "
+                        "all inquiries, essays, detailed explanations, and multilingual "
+                        "queries (including Marathi and Hindi) with high accuracy and depth."
+                    ),
+                }
+            ]
+
+            lines = request.prompt.strip().split("\n")
+            current_role = "user"
+            current_buffer: list[str] = []
+
+            for line in lines:
+                if line.startswith("User:"):
+                    if current_buffer:
+                        messages.append(
+                            {"role": current_role, "content": "\n".join(current_buffer).strip()}
+                        )
+                        current_buffer = []
+                    current_role = "user"
+                    current_buffer.append(line[len("User:") :].strip())
+                elif line.startswith("Assistant:"):
+                    if current_buffer:
+                        messages.append(
+                            {"role": current_role, "content": "\n".join(current_buffer).strip()}
+                        )
+                        current_buffer = []
+                    current_role = "assistant"
+                    current_buffer.append(line[len("Assistant:") :].strip())
+                else:
+                    current_buffer.append(line)
+
+            if current_buffer:
+                messages.append(
+                    {"role": current_role, "content": "\n".join(current_buffer).strip()}
+                )
+
+            if len(messages) == 1:
+                messages.append({"role": "user", "content": request.prompt})
+
+            max_tokens = min(max(request.max_output_tokens * 2, 768), 2048)
             payload = {
                 "model": self.model_id,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are the central cloud AI assistant in the SunRoute "
-                            "solar microgrid system. Provide accurate, helpful, "
-                            "and concise responses."
-                        ),
-                    },
-                    {"role": "user", "content": request.prompt},
-                ],
-                "max_tokens": min(max(request.max_output_tokens * 2, 256), 1024),
-                "temperature": 0.4,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": 0.5,
             }
 
             resp = await client.post(
