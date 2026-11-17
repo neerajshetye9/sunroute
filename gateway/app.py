@@ -825,16 +825,16 @@ def create_gateway_app(
             lang in p_lower for lang in ["in marathi", "in hindi", "marathi", "hindi"]
         )
 
-        has_image = bool(req.attachments and any("image" in a.mime_type for a in req.attachments))
+        img_attachment = next(
+            (a for a in req.attachments if "image" in a.mime_type and a.data_url),
+            None,
+        )
+        has_image = img_attachment is not None
+        image_data_url = img_attachment.data_url if img_attachment else None
+
         if has_image:
             effective_max_tokens = max(effective_max_tokens, 400)
             task_kind = TaskType.LONG_FORM
-            img_names = ", ".join(a.name for a in req.attachments if "image" in a.mime_type)
-            full_prompt = (
-                f"{full_prompt}\n"
-                f"[System note: User attached image screenshot '{img_names}'. "
-                "Provide a helpful analytical explanation regarding the image and user inquiry.]"
-            )
         elif any(
             s in p_lower
             for s in ["50 words", "in 50 words", "short summary", "briefly", "in brief"]
@@ -858,6 +858,7 @@ def create_gateway_app(
         infer_req = InferenceRequest(
             request_id=uuid.uuid4(),
             prompt=full_prompt,
+            image_data_url=image_data_url,
             task_type=task_kind,
             prompt_tokens_est=max(10, len(full_prompt.split()) * 2),
             max_output_tokens=effective_max_tokens,

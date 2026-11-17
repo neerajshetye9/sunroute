@@ -111,6 +111,10 @@ class InferenceRequest(BaseModel):
         max_length=8192,
         description="Inference prompt text (max 8192 chars)",
     )
+    image_data_url: str | None = Field(
+        default=None,
+        description="Optional base64 image data URL for multimodal vision tasks",
+    )
 
 
 class InferenceResponse(BaseModel):

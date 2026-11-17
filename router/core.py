@@ -103,6 +103,10 @@ def is_complex_or_heavy_task(request: InferenceRequest) -> tuple[bool, str]:
     latest_query = extract_latest_user_query(request.prompt)
     prompt_lower = latest_query.lower()
 
+    # Multimodal image input must escalate to cloud vision tier
+    if request.image_data_url:
+        return True, "multimodal image analysis escalated to central cloud vision tier"
+
     # If user explicitly requests concise / short output, keep on edge
     if any(
         s in prompt_lower

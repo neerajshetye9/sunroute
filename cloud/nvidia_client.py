@@ -110,59 +110,89 @@ class NvidiaNimClient(CloudInferenceClient):
         t0 = time.perf_counter()
         try:
             client = await self._get_http_client()
-            # Parse conversation messages if formatted as multi-turn turns
-            messages = [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are the central cloud AI assistant in SunRoute. "
-                        "Answer user queries thoroughly, accurately, and naturally. "
-                        "Always respond strictly in the single language used or "
-                        "requested by the user (e.g., respond in English if asked in English). "
-                        "Never add unsolicited translations or multilingual appendices."
-                    ),
+
+            if request.image_data_url:
+                model_to_use = "nvidia/nemotron-3.5-super-vl-120b-a12b"
+                payload = {
+                    "model": model_to_use,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": (
+                                        f"{request.prompt}\n\n"
+                                        "Examine the attached image carefully. Describe what "
+                                        "you see, including any text, UI elements, or visual "
+                                        "details in clear English."
+                                    ),
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": request.image_data_url},
+                                },
+                            ],
+                        }
+                    ],
+                    "max_tokens": min(max(request.max_output_tokens * 2, 512), 1024),
+                    "temperature": 0.3,
                 }
-            ]
+            else:
+                model_to_use = self.model_id
+                # Parse conversation messages if formatted as multi-turn turns
+                messages = [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are the central cloud AI assistant in SunRoute. "
+                            "Answer user queries thoroughly, accurately, and naturally. "
+                            "Always respond strictly in the single language used or "
+                            "requested by the user (e.g., respond in English if asked in English). "
+                            "Never add unsolicited translations or multilingual appendices."
+                        ),
+                    }
+                ]
 
-            lines = request.prompt.strip().split("\n")
-            current_role = "user"
-            current_buffer: list[str] = []
+                lines = request.prompt.strip().split("\n")
+                current_role = "user"
+                current_buffer: list[str] = []
 
-            for line in lines:
-                if line.startswith("User:"):
-                    if current_buffer:
-                        messages.append(
-                            {"role": current_role, "content": "\n".join(current_buffer).strip()}
-                        )
-                        current_buffer = []
-                    current_role = "user"
-                    current_buffer.append(line[len("User:") :].strip())
-                elif line.startswith("Assistant:"):
-                    if current_buffer:
-                        messages.append(
-                            {"role": current_role, "content": "\n".join(current_buffer).strip()}
-                        )
-                        current_buffer = []
-                    current_role = "assistant"
-                    current_buffer.append(line[len("Assistant:") :].strip())
-                else:
-                    current_buffer.append(line)
+                for line in lines:
+                    if line.startswith("User:"):
+                        if current_buffer:
+                            messages.append(
+                                {"role": current_role, "content": "\n".join(current_buffer).strip()}
+                            )
+                            current_buffer = []
+                        current_role = "user"
+                        current_buffer.append(line[len("User:") :].strip())
+                    elif line.startswith("Assistant:"):
+                        if current_buffer:
+                            messages.append(
+                                {"role": current_role, "content": "\n".join(current_buffer).strip()}
+                            )
+                            current_buffer = []
+                        current_role = "assistant"
+                        current_buffer.append(line[len("Assistant:") :].strip())
+                    else:
+                        current_buffer.append(line)
 
-            if current_buffer:
-                messages.append(
-                    {"role": current_role, "content": "\n".join(current_buffer).strip()}
-                )
+                if current_buffer:
+                    messages.append(
+                        {"role": current_role, "content": "\n".join(current_buffer).strip()}
+                    )
 
-            if len(messages) == 1:
-                messages.append({"role": "user", "content": request.prompt})
+                if len(messages) == 1:
+                    messages.append({"role": "user", "content": request.prompt})
 
-            max_tokens = min(max(request.max_output_tokens * 2, 768), 2048)
-            payload = {
-                "model": self.model_id,
-                "messages": messages,
-                "max_tokens": max_tokens,
-                "temperature": 0.5,
-            }
+                max_tokens = min(max(request.max_output_tokens * 2, 768), 2048)
+                payload = {
+                    "model": model_to_use,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                    "temperature": 0.5,
+                }
 
             resp = await client.post(
                 f"{self.base_url}/chat/completions",
@@ -185,7 +215,7 @@ class NvidiaNimClient(CloudInferenceClient):
             # Datacenter estimated energy: ~7.2 J/token baseline for DGX/H100 blade
             energy_j = (prompt_tokens + output_tokens) * 7.2
 
-            clean_model = self.model_id.split("/")[-1]
+            clean_model = model_to_use.split("/")[-1]
             return InferenceResponse(
                 request_id=request.request_id,
                 node_id="nvidia-nim-datacenter",
