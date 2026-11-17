@@ -822,6 +822,12 @@ def create_gateway_app(
 
         if req.attachments and any("image" in a.mime_type for a in req.attachments):
             task_kind = TaskType.VISION
+        elif any(
+            s in p_lower
+            for s in ["50 words", "in 50 words", "short summary", "briefly", "in brief"]
+        ):
+            effective_max_tokens = 90
+            task_kind = TaskType.SHORT_QA
         elif any(w in p_lower for w in ["1000 words", "1000 word"]):
             effective_max_tokens = max(effective_max_tokens, 800)
             task_kind = TaskType.LONG_FORM
@@ -831,6 +837,10 @@ def create_gateway_app(
         elif is_multilingual:
             effective_max_tokens = max(effective_max_tokens, 400)
             task_kind = TaskType.LONG_FORM
+        else:
+            # Standard conversational question: keep output budget at 150 for edge
+            effective_max_tokens = min(effective_max_tokens, 150)
+            task_kind = TaskType.CHAT
 
         infer_req = InferenceRequest(
             request_id=uuid.uuid4(),

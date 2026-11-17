@@ -353,7 +353,7 @@ export default function App() {
     setIsInferring(true);
 
     try {
-      let maxTokens = 250;
+      let maxTokens = 150;
       const lower = textToSend.toLowerCase();
       if (lower.includes('1000 word') || lower.includes('1000 words')) {
         maxTokens = 850;
@@ -364,6 +364,13 @@ export default function App() {
         lower.includes('essay')
       ) {
         maxTokens = 600;
+      } else if (
+        lower.includes('50 words') ||
+        lower.includes('in 50 words') ||
+        lower.includes('short summary') ||
+        lower.includes('briefly')
+      ) {
+        maxTokens = 90;
       }
 
       const payload = {
@@ -1050,7 +1057,7 @@ export default function App() {
                                   fontWeight: 600,
                                   fontSize: '11px',
                                 }}>
-                                  <Cloud size={12} /> AWS Bedrock Central Tier
+                                  <Cloud size={12} /> {msg.routing_metadata.target_city_name || 'Central Cloud Datacenter'}
                                 </span>
                               ) : (
                                 <span style={{

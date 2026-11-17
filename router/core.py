@@ -86,14 +86,34 @@ def pick_power_of_two(
     return sampled[1], s2
 
 
+def extract_latest_user_query(prompt: str) -> str:
+    """Extract only the current active user turn if multi-turn history is present."""
+    if "\nUser:" in prompt:
+        parts = prompt.split("\nUser:")
+        return parts[-1].split("\nAssistant:")[0].strip()
+    if prompt.startswith("User:"):
+        parts = prompt.split("User:")
+        return parts[-1].split("\nAssistant:")[0].strip()
+    return prompt.strip()
+
+
 def is_complex_or_heavy_task(request: InferenceRequest) -> tuple[bool, str]:
-    """Check if query demands cloud scale (long output, essay, or non-Latin multilingual)."""
-    prompt_lower = request.prompt.lower()
+    """Check if the CURRENT query demands cloud scale (essay, long output, multilingual)."""
+    # Evaluate only the current turn, not previous conversation history
+    latest_query = extract_latest_user_query(request.prompt)
+    prompt_lower = latest_query.lower()
+
+    # If user explicitly requests concise / short output, keep on edge
+    if any(
+        s in prompt_lower
+        for s in ["50 words", "in 50 words", "short summary", "briefly", "in brief"]
+    ):
+        return False, ""
 
     if request.task_type == TaskType.LONG_FORM:
         return True, "task type LONG_FORM escalated to central cloud tier"
 
-    if request.max_output_tokens >= 300:
+    if request.max_output_tokens >= 350:
         return True, f"requested token budget ({request.max_output_tokens}) exceeds edge capacity"
 
     heavy_keywords = [
@@ -111,7 +131,7 @@ def is_complex_or_heavy_task(request: InferenceRequest) -> tuple[bool, str]:
         return True, "task demands extensive generative length (essay/long form)"
 
     # Non-Latin multilingual scripts (Devanagari, Marathi, Hindi, etc.)
-    has_devanagari = any("\u0900" <= ch <= "\u097f" for ch in request.prompt)
+    has_devanagari = any("\u0900" <= ch <= "\u097f" for ch in latest_query)
     if has_devanagari or any(
         lang in prompt_lower for lang in ["in marathi", "in hindi", "marathi", "hindi"]
     ):
