@@ -189,7 +189,7 @@ export default function App() {
   const [opsMessages, setOpsMessages] = useState<{ sender: 'user' | 'assistant'; text: string; time: string }[]>([
     {
       sender: 'assistant',
-      text: '👋 **SunRoute Fleet AI Copilot Initialized**.\n\nI monitor all 30 microgrid nodes across Maharashtra and analyze real-time routing decisions.\n\nYou can ask: *"Which nodes have low battery?"*, *"Show solar generation in Khandesh"*, or *"Why was the last query routed to AWS Bedrock?"*.',
+      text: '👋 **SunRoute Fleet AI Copilot Initialized**.\n\nI monitor all 30 microgrid nodes across Maharashtra and analyze real-time routing decisions.\n\nYou can ask: *"Which nodes have low battery?"*, *"Show solar generation in Khandesh"*, or *"Why was the last query routed to NVIDIA NIM Cloud?"*.',
       time: 'Ready',
     },
   ]);
@@ -877,7 +877,7 @@ export default function App() {
                 <span style={{ color: '#f59e0b', fontWeight: 600 }}>0.339 J/token</span>
               </div>
               <div style={{ color: '#64748b' }}>
-                Inference locally executed on NVIDIA Jetson or AWS Bedrock fallback.
+                Inference locally executed on NVIDIA Jetson or NVIDIA NIM Cloud fallback.
               </div>
             </div>
           </aside>
@@ -908,7 +908,7 @@ export default function App() {
                     What would you like to explore today?
                   </h1>
                   <p style={{ fontSize: '14px', color: '#94a3b8', margin: '0 0 28px' }}>
-                    SunRoute coordinates community edge solar nodes across Maharashtra with AWS Bedrock data center fallback.
+                    SunRoute coordinates community edge solar nodes across Maharashtra with NVIDIA NIM Datacenter fallback.
                   </p>
 
                   {/* Suggestion prompt cards */}
@@ -916,7 +916,7 @@ export default function App() {
                     {[
                       { title: 'Explain solar battery microgrids', desc: 'How localized batteries maintain continuous off-grid AI compute.' },
                       { title: 'What about electricity?', desc: 'Discover how clean energy flows dynamically to edge nodes.' },
-                      { title: 'Jetson Orin Nano Super vs AWS Bedrock', desc: 'Compare 0.339 J/token edge compute against 7.2 J/token cloud.' },
+                      { title: 'Jetson Orin Nano Super vs NVIDIA NIM Cloud', desc: 'Compare 0.339 J/token edge compute against 7.2 J/token cloud.' },
                       { title: 'How does SunRoute routing work?', desc: 'Learn the 4-factor score: Energy, Latency, Locality, Fairness.' },
                     ].map((card, i) => (
                       <button
@@ -1301,7 +1301,7 @@ export default function App() {
                       }}
                     >
                       <option value="proposed">Proposed Microgrid Policy</option>
-                      <option value="cloud_only">AWS Bedrock Cloud Only</option>
+                      <option value="cloud_only">NVIDIA NIM Cloud Only</option>
                       <option value="edge_only">Local Edge Only</option>
                       <option value="cascade">Cascade Fallback</option>
                     </select>
@@ -1440,7 +1440,7 @@ export default function App() {
                         backgroundColor: isJetson ? 'rgba(168, 85, 247, 0.2)' : isCloud ? 'rgba(2, 132, 199, 0.2)' : 'rgba(16, 185, 129, 0.2)',
                         color: isJetson ? '#c084fc' : isCloud ? '#38bdf8' : '#34d399',
                       }}>
-                        {isJetson ? 'PHYSICAL JETSON' : isCloud ? 'AWS BEDROCK' : 'DIGITAL TWIN'}
+                        {isJetson ? 'PHYSICAL JETSON' : isCloud ? 'NVIDIA NIM' : 'DIGITAL TWIN'}
                       </span>
                     </div>
 
@@ -1576,7 +1576,7 @@ export default function App() {
               {[
                 { label: '🔋 Low Battery', q: 'Which nodes have low battery right now?' },
                 { label: '☀️ Solar Stats', q: 'Show solar generation across all regions' },
-                { label: '☁️ Cloud Rationale', q: 'Why was the last query routed to AWS Bedrock?' },
+                { label: '☁️ Cloud Rationale', q: 'Why was the last query routed to NVIDIA NIM Cloud?' },
                 { label: '📊 Health Summary', q: 'Summarize cluster health and carbon savings' },
               ].map((chip, idx) => (
                 <button
